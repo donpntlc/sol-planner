@@ -2,11 +2,10 @@
   "name": "SOL Planner",
   "short_name": "SOL Planner",
   "start_url": ".",
-  "scope": ".",
   "display": "standalone",
   "background_color": "#000000",
   "theme_color": "#000000",
-  "description": "SOL Planner – Tagesplanung",
+  "description": "SOL Day Planner \u2014 Tagesplanung mit Presets, Bl\u00f6cken und Kategorien.",
   "orientation": "portrait-primary",
   "prefer_related_applications": false,
   "icons": [
@@ -32,5 +31,6 @@
       "type": "image/png",
       "purpose": "maskable"
     }
-  ]
+  ],
+  "scope": "."
 }
