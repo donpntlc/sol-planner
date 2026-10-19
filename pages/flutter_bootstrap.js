@@ -2,7 +2,7 @@
 (function () {
   if (!document.getElementById('flutter_host')) {
     var st = document.createElement('style');
-    st.textContent = '#flutter_host{position:fixed;left:env(safe-area-inset-left,0px);right:env(safe-area-inset-right,0px);top:env(safe-area-inset-top,0px);bottom:env(safe-area-inset-bottom,0px)}';
+    st.textContent = '#flutter_host{position:fixed;inset:0}';
     document.head.appendChild(st);
     var h = document.createElement('div');
     h.id = 'flutter_host';

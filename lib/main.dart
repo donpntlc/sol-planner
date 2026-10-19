@@ -15,6 +15,7 @@ import 'package:sol/block_session_segment.dart';
 import 'package:sol/planner_notifications.dart';
 import 'package:sol/planner_reminder_prefs.dart';
 import 'package:sol/project_rotation.dart';
+import 'package:sol/web_safe_area.dart';
 import 'package:sol/reminder_prefs_sheet.dart';
 import 'package:sol/widgets/block_session_live_strip.dart';
 import 'package:sol/widgets/current_task/current_task_package.dart';
@@ -317,11 +318,19 @@ class _DayPlannerAppState extends State<DayPlannerApp> {
         final mq = MediaQuery.of(context);
         const uiScale = _kAppUiScale;
         final logical = mq.size / uiScale;
+        // Im Browser kennt Flutter die iPhone-Ränder nicht → aus index.html übernehmen.
+        final sys = kIsWeb ? webSafeAreaInsets() : EdgeInsets.zero;
+        EdgeInsets withSys(EdgeInsets e) => EdgeInsets.fromLTRB(
+          max(e.left, sys.left),
+          max(e.top, sys.top),
+          max(e.right, sys.right),
+          max(e.bottom, sys.bottom),
+        );
         final inner = MediaQuery(
           data: mq.copyWith(
             size: logical,
-            padding: mq.padding / uiScale,
-            viewPadding: mq.viewPadding / uiScale,
+            padding: withSys(mq.padding) / uiScale,
+            viewPadding: withSys(mq.viewPadding) / uiScale,
             viewInsets: mq.viewInsets / uiScale,
             textScaler: mq.textScaler.clamp(
               minScaleFactor: 0.85,
