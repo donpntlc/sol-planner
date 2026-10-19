@@ -108338,7 +108338,7 @@ A.XR.prototype={
 K(a){var s=A.b2s(B.pk,B.av),r=A.b2s(B.iO,B.aD),q=this.d
 return new A.E9(new A.EV(this.a.c,new A.awK(this),null),new A.awL(),"SOL - Planer",s,r,q,!1,B.Iq,null)}}
 A.awL.prototype={
-$2(a,b){return A.Eg(b==null?B.az:b,1.25,0.85)},
+$2(a,b){return A.Eg(b==null?B.az:b,1,0.85)},
 $S:80}
 A.awK.prototype={
 $0(){var s=this.a
