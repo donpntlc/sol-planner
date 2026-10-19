@@ -10,7 +10,7 @@ permissions:
 
 concurrency:
   group: deploy-web
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -23,17 +23,28 @@ jobs:
           channel: stable
           cache: true
 
+      - name: Version festlegen
+        run: echo "VER=$(date -u +%Y%m%d%H%M%S)-${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+
       - run: flutter pub get
 
-      - run: flutter build web --release --no-tree-shake-icons --base-href /sol-planner/
+      - run: flutter build web --release --no-tree-shake-icons --base-href "/sol-planner/b/${VER}/"
 
-      - run: touch build/web/.nojekyll
-
-      - uses: peaceiris/actions-gh-pages@v4
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_branch: main
-          publish_dir: build/web
-          user_name: SOL Build
-          user_email: github-actions[bot]@users.noreply.github.com
-          commit_message: "Web-Build"
+      - name: Veröffentlichen (jede Version in eigenem Ordner, kein Cache-Problem)
+        run: |
+          git config --global user.name "SOL Build"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git clone --depth 1 --branch main "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git" site
+          cd site
+          # Alles außer den Versionsordnern entfernen (alte Einzel-Builds im Hauptordner)
+          find . -mindepth 1 -maxdepth 1 ! -name .git ! -name b -exec rm -rf {} +
+          mkdir -p "b/${VER}"
+          cp -r ../build/web/. "b/${VER}/"
+          cp -r ../pages/. .
+          touch .nojekyll
+          echo "{\"base\":\"/sol-planner/b/${VER}/\",\"version\":\"${VER}\"}" > latest.json
+          # Nur die letzten 3 Versionen behalten
+          ls -1 b | sort | head -n -3 | while read d; do rm -rf "b/$d"; done
+          git add -A
+          git commit -m "Web-Build ${VER} (${GITHUB_SHA})"
+          git push origin main
