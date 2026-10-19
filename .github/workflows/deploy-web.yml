@@ -1,0 +1,39 @@
+name: Web-App bauen und veröffentlichen
+
+on:
+  push:
+    branches: [source]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: deploy-web
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+
+      - run: flutter build web --release --no-tree-shake-icons --base-href /sol-planner/
+
+      - run: touch build/web/.nojekyll
+
+      - uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: main
+          publish_dir: build/web
+          user_name: SOL Build
+          user_email: github-actions[bot]@users.noreply.github.com
+          commit_message: "Web-Build"
