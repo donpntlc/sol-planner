@@ -309,9 +309,10 @@ class _DayPlannerAppState extends State<DayPlannerApp> {
       darkTheme: _buildPlannerTheme(AppPalette.dark, Brightness.dark),
       themeMode: _themeMode,
       builder: (context, child) {
+        // Große Systemschrift (iOS „Textgröße“) nicht übernehmen: Layout bleibt kompakt.
         return MediaQuery.withClampedTextScaling(
           minScaleFactor: 0.85,
-          maxScaleFactor: 1.25,
+          maxScaleFactor: 1.0,
           child: child ?? const SizedBox.shrink(),
         );
       },
