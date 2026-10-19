@@ -24,6 +24,9 @@ import 'package:sol/cloud/sol_cloud_sync_sheet.dart';
 import 'package:sol/cloud/sol_planner_cloud_sync.dart';
 import 'package:sol/cloud/sol_planner_sync_hook.dart';
 
+/// Gesamtskalierung der Oberfläche (1.0 = normal, 0.88 = etwas rausgezoomt).
+const double _kAppUiScale = 0.88;
+
 const _kColorPickerDragScale =
     0.48; // <1: gleiche Fingerbewegung → kleinere Farbänderung (feinere Bedienung).
 const _kHuePickerDragScale = 0.52;
@@ -309,11 +312,33 @@ class _DayPlannerAppState extends State<DayPlannerApp> {
       darkTheme: _buildPlannerTheme(AppPalette.dark, Brightness.dark),
       themeMode: _themeMode,
       builder: (context, child) {
-        // Große Systemschrift (iOS „Textgröße“) nicht übernehmen: Layout bleibt kompakt.
-        return MediaQuery.withClampedTextScaling(
-          minScaleFactor: 0.85,
-          maxScaleFactor: 1.0,
+        // Große Systemschrift (iOS „Textgröße“) nicht übernehmen und die ganze
+        // Oberfläche leicht verkleinern (wie „rauszoomen“), damit mehr aufs Handy passt.
+        final mq = MediaQuery.of(context);
+        const uiScale = _kAppUiScale;
+        final logical = mq.size / uiScale;
+        final inner = MediaQuery(
+          data: mq.copyWith(
+            size: logical,
+            padding: mq.padding / uiScale,
+            viewPadding: mq.viewPadding / uiScale,
+            viewInsets: mq.viewInsets / uiScale,
+            textScaler: mq.textScaler.clamp(
+              minScaleFactor: 0.85,
+              maxScaleFactor: 1.0,
+            ),
+          ),
           child: child ?? const SizedBox.shrink(),
+        );
+        if (uiScale == 1.0 || mq.size.isEmpty) return inner;
+        return FittedBox(
+          fit: BoxFit.fill,
+          alignment: Alignment.topLeft,
+          child: SizedBox(
+            width: logical.width,
+            height: logical.height,
+            child: inner,
+          ),
         );
       },
       home: PlannerHome(
