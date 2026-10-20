@@ -32,14 +32,19 @@ class ProjectRotation {
     List<RotationProject>? items,
     this.nextIndex = 0,
     Map<String, String>? assigned,
+    Map<String, SessionNote>? notes,
   }) : items = items ?? [],
-       assigned = assigned ?? {};
+       assigned = assigned ?? {},
+       notes = notes ?? {};
 
   final List<RotationProject> items;
   int nextIndex;
 
   /// `yyyy-mm-dd|blockId` → Projekt-ID (nur für abgehakte Sessions).
   final Map<String, String> assigned;
+
+  /// `yyyy-mm-dd|blockId` → Notiz zur Session (auch für noch offene Sessions).
+  final Map<String, SessionNote> notes;
 
   bool get isEmpty => items.isEmpty;
 
@@ -70,6 +75,8 @@ class ProjectRotation {
     final k = keyFor(day, blockId);
     if (assigned.containsKey(k)) return;
     assigned[k] = items[_safeNext].id;
+    final n = notes[k];
+    if (n != null) notes[k] = SessionNote(projectId: assigned[k]!, text: n.text);
     nextIndex = (_safeNext + 1) % items.length;
     _trimAssigned();
   }
@@ -120,13 +127,60 @@ class ProjectRotation {
     if (i >= 0) nextIndex = i;
   }
 
+  /// Notiz für eine Session setzen (leer = löschen).
+  void setNote(DateTime day, String blockId, String projectId, String text) {
+    final k = keyFor(day, blockId);
+    final t = text.trim();
+    if (t.isEmpty) {
+      notes.remove(k);
+    } else {
+      notes[k] = SessionNote(projectId: projectId, text: t);
+    }
+  }
+
+  String noteFor(DateTime day, String blockId) =>
+      notes[keyFor(day, blockId)]?.text ?? '';
+
+  static DateTime? _dayOfKey(String k) {
+    final d = k.split('|').first;
+    return DateTime.tryParse(d);
+  }
+
+  /// Letzter Tag, an dem [projectId] abgehakt wurde.
+  DateTime? lastDone(String projectId) {
+    DateTime? best;
+    assigned.forEach((k, v) {
+      if (v != projectId) return;
+      final d = _dayOfKey(k);
+      if (d != null && (best == null || d.isAfter(best!))) best = d;
+    });
+    return best;
+  }
+
+  /// Erledigte Sessions eines Projekts, neueste zuerst (mit Notiz).
+  List<SessionEntry> history(String projectId) {
+    final out = <SessionEntry>[];
+    assigned.forEach((k, v) {
+      if (v != projectId) return;
+      final d = _dayOfKey(k);
+      if (d == null) return;
+      out.add(SessionEntry(day: d, key: k, note: notes[k]?.text ?? ''));
+    });
+    out.sort((a, b) {
+      final c = b.day.compareTo(a.day);
+      return c != 0 ? c : b.key.compareTo(a.key);
+    });
+    return out;
+  }
+
   /// Alte Zuordnungen begrenzen (nur Historie für die Anzeige abgehakter Blöcke).
   void _trimAssigned() {
-    const maxEntries = 400;
+    const maxEntries = 3000;
     if (assigned.length <= maxEntries) return;
     final keys = assigned.keys.toList()..sort();
     for (final k in keys.take(assigned.length - maxEntries)) {
       assigned.remove(k);
+      notes.remove(k);
     }
   }
 
@@ -134,6 +188,7 @@ class ProjectRotation {
     'items': items.map((e) => e.toJson()).toList(),
     'nextIndex': nextIndex,
     'assigned': assigned,
+    'notes': notes.map((k, v) => MapEntry(k, v.toJson())),
   };
 
   factory ProjectRotation.fromJson(Map<String, dynamic> j) {
@@ -154,10 +209,21 @@ class ProjectRotation {
         if (k is String && v is String) assigned[k] = v;
       });
     }
+    final notes = <String, SessionNote>{};
+    final rawN = j['notes'];
+    if (rawN is Map) {
+      rawN.forEach((k, v) {
+        if (k is String && v is Map) {
+          final n = SessionNote.fromJson(Map<String, dynamic>.from(v));
+          if (n.text.isNotEmpty) notes[k] = n;
+        }
+      });
+    }
     return ProjectRotation(
       items: items,
       nextIndex: (j['nextIndex'] as num?)?.toInt() ?? 0,
       assigned: assigned,
+      notes: notes,
     );
   }
 
@@ -181,6 +247,46 @@ class ProjectRotation {
 
   static String _newId() =>
       'p_${DateTime.now().microsecondsSinceEpoch}_${Random().nextInt(1 << 20)}';
+}
+
+/// Notiz zu einer einzelnen Projekt-Session.
+class SessionNote {
+  const SessionNote({required this.projectId, required this.text});
+
+  final String projectId;
+  final String text;
+
+  Map<String, dynamic> toJson() => {'p': projectId, 't': text};
+
+  factory SessionNote.fromJson(Map<String, dynamic> j) => SessionNote(
+    projectId: ((j['p'] as String?) ?? '').trim(),
+    text: ((j['t'] as String?) ?? '').trim(),
+  );
+}
+
+/// Eintrag im Verlauf eines Projekts.
+class SessionEntry {
+  const SessionEntry({required this.day, required this.key, required this.note});
+
+  final DateTime day;
+  final String key;
+  final String note;
+}
+
+/// „Heute“, „Gestern“, „vor 3 Tagen“, „Noch nie“ — wie bei Trainings-Routinen.
+String lastDoneLabel(DateTime? day, {DateTime? now}) {
+  if (day == null) return 'Noch nie';
+  final n = now ?? DateTime.now();
+  final today = DateTime(n.year, n.month, n.day);
+  final d = DateTime(day.year, day.month, day.day);
+  final diff = today.difference(d).inDays;
+  if (diff <= 0) return 'Heute';
+  if (diff == 1) return 'Gestern';
+  if (diff < 7) return 'vor $diff Tagen';
+  if (diff < 14) return 'vor 1 Woche';
+  if (diff < 60) return 'vor ${diff ~/ 7} Wochen';
+  final m = diff ~/ 30;
+  return m < 12 ? 'vor $m Monaten' : 'vor über 1 Jahr';
 }
 
 /// Erkennt Projekt-Session-Blöcke am Titel: „Projekt-Session“, „Projekt Session“,

@@ -28,7 +28,23 @@ jobs:
 
       - run: flutter pub get
 
-      - run: flutter build web --release --no-tree-shake-icons --base-href "/sol-planner/b/${VER}/"
+      - name: Bauen
+        shell: bash
+        run: |
+          set -o pipefail
+          flutter build web --release --no-tree-shake-icons --base-href "/sol-planner/b/${VER}/" 2>&1 | tee build.log
+
+      - name: Fehlerlog sichern (Branch build-logs)
+        if: failure()
+        shell: bash
+        run: |
+          git config --global user.name "SOL Build"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          mkdir -p /tmp/logs && cp build.log /tmp/logs/ 2>/dev/null || echo "kein build.log" > /tmp/logs/build.log
+          cd /tmp/logs && git init -q && git checkout -q -b build-logs
+          echo "${GITHUB_SHA}" > sha.txt
+          git add -A && git commit -qm "Fehlerlog ${GITHUB_SHA}"
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git" build-logs
 
       - name: Veröffentlichen (jede Version in eigenem Ordner, kein Cache-Problem)
         run: |

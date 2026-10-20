@@ -3466,7 +3466,13 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(12),
-          onTap: () => _openEditBlockDialog(block),
+          onTap: () {
+            if (_isProjectSessionBlock(block)) {
+              unawaited(_openProjectSessionSheet(block));
+            } else {
+              _openEditBlockDialog(block);
+            }
+          },
           child: Ink(
             decoration: BoxDecoration(
               color: Color.alphaBlend(fill, p.surface),
@@ -3594,26 +3600,6 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
     unawaited(_saveProjectRotation());
   }
 
-  /// Projektname für eine Projekt-Session: abgehakt → zugeordnetes Projekt,
-  /// offen → das nächste in der Rotation (mehrere offene Sessions am Tag zählen weiter).
-  String? _projectSessionLabel(TimeBlock b) {
-    if (_projectRotation.isEmpty) return null;
-    final day = _onlyDay(_selectedDate);
-    if (b.completed) {
-      final pid = _projectRotation.assigned[ProjectRotation.keyFor(day, b.id)];
-      return pid == null ? null : _projectRotation.byId(pid)?.title;
-    }
-    var offset = 0;
-    for (final x in _getBlocksForDay(_selectedDate)) {
-      if (x.id == b.id || x.completed || !_isProjectSessionBlock(x)) continue;
-      if (x.startMin < b.startMin ||
-          (x.startMin == b.startMin && x.id.compareTo(b.id) < 0)) {
-        offset++;
-      }
-    }
-    return _projectRotation.upcoming(offset)?.title;
-  }
-
   Widget _projectNextChip(BuildContext context, TimeBlock block, Color? ink) {
     final p = context.palette;
     final name = _projectSessionLabel(block);
@@ -3628,7 +3614,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(99),
-          onTap: _openProjectRotationSheet,
+          onTap: () => _openProjectSessionSheet(block),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
@@ -3671,17 +3657,423 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
     );
   }
 
+  /// Projekt einer Projekt-Session: abgehakt → zugeordnetes Projekt,
+  /// offen → das nächste in der Rotation (mehrere offene Sessions am Tag zählen weiter).
+  RotationProject? _projectSessionProject(TimeBlock b) {
+    if (_projectRotation.isEmpty) return null;
+    final day = _onlyDay(_selectedDate);
+    if (b.completed) {
+      final pid = _projectRotation.assigned[ProjectRotation.keyFor(day, b.id)];
+      return pid == null ? null : _projectRotation.byId(pid);
+    }
+    var offset = 0;
+    for (final x in _getBlocksForDay(_selectedDate)) {
+      if (x.id == b.id || x.completed || !_isProjectSessionBlock(x)) continue;
+      if (x.startMin < b.startMin ||
+          (x.startMin == b.startMin && x.id.compareTo(b.id) < 0)) {
+        offset++;
+      }
+    }
+    return _projectRotation.upcoming(offset);
+  }
+
+  String? _projectSessionLabel(TimeBlock b) => _projectSessionProject(b)?.title;
+
+  static const List<String> _kWeekdayShort = [
+    'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So',
+  ];
+
+  String _fmtShortDate(DateTime d) =>
+      '${_kWeekdayShort[d.weekday - 1]}, ${d.day}.${d.month}.${d.year == DateTime.now().year ? '' : d.year}';
+
+  /// Fertigen „Projekt-Session“-Block (60 min) in die nächste freie Lücke des Tages legen.
+  void _addProjectSessionBlock() {
+    final day = _onlyDay(_selectedDate);
+    final blocks = _getBlocksForDay(_selectedDate);
+    final now = DateTime.now();
+    const want = 60;
+    final from = day == _onlyDay(now)
+        ? (((now.hour * 60 + now.minute + 14) ~/ 15) * 15).clamp(0, 1440 - want)
+        : 9 * 60;
+    final busy = <List<int>>[];
+    for (final b in blocks) {
+      if (b.allDay) continue;
+      if (b.isLinearSlot) {
+        busy.add([b.startMin, b.endMin]);
+      } else if (b.isOvernightSlot) {
+        busy.add([b.startMin, 1440]);
+        busy.add([0, b.endMin]);
+      }
+    }
+    busy.sort((a, c) => a[0].compareTo(c[0]));
+    int? start;
+    var cursor = from;
+    for (final iv in busy) {
+      if (iv[1] <= cursor) continue;
+      if (iv[0] - cursor >= want) {
+        start = cursor;
+        break;
+      }
+      if (iv[1] > cursor) cursor = iv[1];
+    }
+    if (start == null && 1440 - cursor >= want) start = cursor;
+    final s = start ?? from;
+    final e = s + want;
+    final label = _categoryColors.containsKey('Fokus')
+        ? 'Fokus'
+        : _fallbackCategoryLabel();
+    _recordUndoSnapshot();
+    final block = _newBlock(
+      'Projekt-Session',
+      s,
+      e,
+      label,
+      '',
+      customIconCodePoint: Icons.autorenew_rounded.codePoint,
+    );
+    setState(() {
+      blocks.add(block);
+      _repairOverlapsWithPins(blocks);
+      _repairUnpinnedLinearOverlaps(blocks);
+      _repairOverlapsWithPins(blocks);
+      _dayPlanPresetKind[day] = _kIndividualDayPresetKey;
+      _gridScrolledForDay = null;
+    });
+    _schedulePersistDayPlans();
+    unawaited(_syncReminders());
+    final next = _projectSessionLabel(block);
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+      SnackBar(
+        content: Text(
+          'Projekt-Session ${_fmtMin(block.startMin)}–${_fmtMin(block.endMin % 1440)} hinzugefügt'
+          '${next != null ? ' · $next' : ''}',
+        ),
+      ),
+    );
+  }
+
+  Widget _sheetFrame(BuildContext sheetCtx, List<Widget> children) {
+    final p = sheetCtx.palette;
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(sheetCtx).viewInsets.bottom,
+      ),
+      child: ClipRRect(
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+        child: Material(
+          color: p.surface,
+          child: SafeArea(
+            top: false,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.sizeOf(sheetCtx).height * 0.9,
+              ),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(20, 10, 20, 16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        margin: const EdgeInsets.only(bottom: 12),
+                        decoration: BoxDecoration(
+                          color: p.hairline,
+                          borderRadius: BorderRadius.circular(99),
+                        ),
+                      ),
+                    ),
+                    ...children,
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _eyebrow(BuildContext context, String text) {
+    final p = context.palette;
+    return Text(
+      text,
+      style: TextStyle(
+        fontSize: 11,
+        fontWeight: FontWeight.w800,
+        letterSpacing: 1.5,
+        color: p.accent,
+      ),
+    );
+  }
+
+  /// Verlauf eines Projekts: Datum, „vor X Tagen“ und Notiz.
+  List<Widget> _projectHistoryWidgets(
+    BuildContext context,
+    RotationProject pr, {
+    String? excludeKey,
+  }) {
+    final p = context.palette;
+    final hist = _projectRotation
+        .history(pr.id)
+        .where((e) => e.key != excludeKey)
+        .toList();
+    if (hist.isEmpty) {
+      return [
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          child: Text(
+            'Noch keine erledigten Sessions.',
+            style: TextStyle(color: p.muted),
+          ),
+        ),
+      ];
+    }
+    return [
+      for (final e in hist)
+        Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+          decoration: BoxDecoration(
+            color: p.bg.withValues(alpha: 0.35),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: p.hairline),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.check_circle_rounded, size: 16, color: p.accent),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _fmtShortDate(e.day),
+                      style: TextStyle(
+                        color: p.text,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    lastDoneLabel(e.day),
+                    style: TextStyle(color: p.muted, fontSize: 12),
+                  ),
+                ],
+              ),
+              if (e.note.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Text(
+                  e.note,
+                  style: TextStyle(color: p.muted, height: 1.35),
+                ),
+              ],
+            ],
+          ),
+        ),
+    ];
+  }
+
+  /// Tippen auf eine Projekt-Session: aktuelles Projekt, Notizen, Verlauf.
+  Future<void> _openProjectSessionSheet(TimeBlock block) async {
+    final day = _onlyDay(_selectedDate);
+    final noteCtrl = TextEditingController(
+      text: _projectRotation.noteFor(day, block.id),
+    );
+    void saveNote() {
+      final pr = _projectSessionProject(block);
+      if (pr == null) return;
+      if (_projectRotation.noteFor(day, block.id) == noteCtrl.text.trim()) {
+        return;
+      }
+      _projectRotation.setNote(day, block.id, pr.id, noteCtrl.text);
+      unawaited(_saveProjectRotation());
+    }
+
+    String? after;
+    try {
+      after = await showModalBottomSheet<String>(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (sheetCtx) {
+          return StatefulBuilder(
+            builder: (context, setLocal) {
+              final p = context.palette;
+              final pr = _projectSessionProject(block);
+              final last = pr == null
+                  ? null
+                  : _projectRotation.lastDone(pr.id);
+              final key = ProjectRotation.keyFor(day, block.id);
+              return _sheetFrame(sheetCtx, [
+                _eyebrow(
+                  context,
+                  block.completed ? 'ERLEDIGT' : 'ALS NÄCHSTES',
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  pr?.title ?? 'Noch keine Projekte',
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    color: p.text,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '${_fmtMin(block.startMin)}–${_fmtMin(block.endMin % 1440)}'
+                  '${pr == null ? '' : ' · Zuletzt: ${lastDoneLabel(last)}'}',
+                  style: TextStyle(color: p.muted),
+                ),
+                const SizedBox(height: 16),
+                if (pr == null) ...[
+                  Text(
+                    'Lege zuerst deine Projekte an (z. B. Programmieren, Klavier, Portugiesisch). '
+                    'Danach zeigt jede Projekt-Session automatisch das nächste.',
+                    style: TextStyle(color: p.muted, height: 1.35),
+                  ),
+                  const SizedBox(height: 12),
+                  FilledButton.icon(
+                    onPressed: () => Navigator.pop(sheetCtx, 'rotation'),
+                    icon: const Icon(Icons.add_rounded),
+                    label: const Text('Projekte festlegen'),
+                  ),
+                ] else ...[
+                  TextField(
+                    controller: noteCtrl,
+                    minLines: 3,
+                    maxLines: 8,
+                    textCapitalization: TextCapitalization.sentences,
+                    onChanged: (_) => saveNote(),
+                    decoration: InputDecoration(
+                      labelText: 'Notizen für diese Session',
+                      hintText: 'z. B. heute: Vokabeln Kapitel 3',
+                      hintStyle: TextStyle(color: p.muted),
+                      filled: true,
+                      fillColor: p.bg.withValues(alpha: 0.35),
+                      alignLabelWithHint: true,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: BorderSide(color: p.hairline),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: FilledButton.icon(
+                          onPressed: () {
+                            saveNote();
+                            _toggleBlockCompletedFromGrid(block);
+                            setLocal(() {});
+                          },
+                          icon: Icon(
+                            block.completed
+                                ? Icons.undo_rounded
+                                : Icons.check_rounded,
+                          ),
+                          label: Text(
+                            block.completed ? 'Wieder öffnen' : 'Erledigt',
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      OutlinedButton(
+                        onPressed: () => Navigator.pop(sheetCtx, 'edit'),
+                        child: const Text('Block bearbeiten'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  _eyebrow(context, 'VERLAUF · ${pr.title.toUpperCase()}'),
+                  const SizedBox(height: 8),
+                  ..._projectHistoryWidgets(context, pr, excludeKey: key),
+                ],
+                const SizedBox(height: 4),
+                TextButton.icon(
+                  onPressed: () => Navigator.pop(sheetCtx, 'rotation'),
+                  icon: const Icon(Icons.autorenew_rounded, size: 18),
+                  label: const Text('Alle Projekte & Reihenfolge'),
+                ),
+              ]);
+            },
+          );
+        },
+      );
+    } finally {
+      saveNote();
+      noteCtrl.dispose();
+      if (mounted) setState(() {});
+    }
+    if (!mounted) return;
+    if (after == 'edit') _openEditBlockDialog(block);
+    if (after == 'rotation') unawaited(_openProjectRotationSheet());
+  }
+
+  /// Verlauf & Notizen eines Projekts (aus der Projektliste).
+  Future<void> _openProjectLogSheet(RotationProject pr) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) {
+        return StatefulBuilder(
+          builder: (context, setLocal) {
+            final p = context.palette;
+            final isNext = _projectRotation.upcoming()?.id == pr.id;
+            final count = _projectRotation.history(pr.id).length;
+            return _sheetFrame(sheetCtx, [
+              if (isNext) _eyebrow(context, 'ALS NÄCHSTES'),
+              Text(
+                pr.title,
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  color: p.text,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Zuletzt: ${lastDoneLabel(_projectRotation.lastDone(pr.id))} · '
+                '$count ${count == 1 ? 'Session' : 'Sessions'}',
+                style: TextStyle(color: p.muted),
+              ),
+              if (!isNext) ...[
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: () {
+                    setState(() => _projectRotation.setNext(pr.id));
+                    unawaited(_saveProjectRotation());
+                    setLocal(() {});
+                  },
+                  icon: const Icon(Icons.skip_next_rounded),
+                  label: const Text('Als Nächstes setzen'),
+                ),
+              ],
+              const SizedBox(height: 20),
+              _eyebrow(context, 'VERLAUF'),
+              const SizedBox(height: 8),
+              ..._projectHistoryWidgets(context, pr),
+            ]);
+          },
+        );
+      },
+    );
+  }
+
   Future<void> _openProjectRotationSheet() async {
     final addCtrl = TextEditingController();
+    var addSession = false;
     try {
       await showModalBottomSheet<void>(
         context: context,
         isScrollControlled: true,
         backgroundColor: Colors.transparent,
         builder: (sheetCtx) {
-          final p = sheetCtx.palette;
           return StatefulBuilder(
             builder: (context, setLocal) {
+              final p = context.palette;
               final rot = _projectRotation;
               final next = rot.upcoming();
               void changed() {
@@ -3697,265 +4089,205 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                 changed();
               }
 
-              return Padding(
-                padding: EdgeInsets.only(
-                  bottom: MediaQuery.of(sheetCtx).viewInsets.bottom,
-                ),
-                child: ClipRRect(
-                  borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(22),
-                  ),
-                  child: Material(
-                    color: p.surface,
-                    child: SafeArea(
-                      top: false,
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 10, 20, 16),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Center(
-                              child: Container(
-                                width: 40,
-                                height: 4,
-                                margin: const EdgeInsets.only(bottom: 12),
-                                decoration: BoxDecoration(
-                                  color: p.hairline,
-                                  borderRadius: BorderRadius.circular(99),
-                                ),
-                              ),
-                            ),
-                            Row(
-                              children: [
-                                Icon(Icons.autorenew_rounded, color: p.text),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Text(
-                                    'Projekt-Rotation',
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .titleLarge
-                                        ?.copyWith(fontWeight: FontWeight.w800),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              'Jeder Block „Projekt-Session“ zeigt das nächste Projekt. '
-                              'Abhaken → das nächste ist dran, nach dem letzten geht es von vorn los. '
-                              'Tippen setzt ein Projekt als nächstes, ziehen ändert die Reihenfolge.',
-                              style: Theme.of(context).textTheme.bodySmall
-                                  ?.copyWith(color: p.muted, height: 1.35),
-                            ),
-                            const SizedBox(height: 10),
-                            if (rot.items.isEmpty)
-                              Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 18,
-                                ),
-                                child: Text(
-                                  'Noch keine Projekte. Füge unten z. B. Programmieren, Klavier, Portugiesisch hinzu.',
-                                  style: Theme.of(context).textTheme.bodyMedium
-                                      ?.copyWith(color: p.muted),
-                                ),
-                              )
-                            else
-                              ConstrainedBox(
-                                constraints: const BoxConstraints(
-                                  maxHeight: 360,
-                                ),
-                                child: ReorderableListView.builder(
-                                  shrinkWrap: true,
-                                  buildDefaultDragHandles: false,
-                                  itemCount: rot.items.length,
-                                  onReorder: (o, n) {
-                                    rot.reorder(o, n);
-                                    changed();
-                                  },
-                                  itemBuilder: (c, i) {
-                                    final item = rot.items[i];
-                                    final isNext = next?.id == item.id;
-                                    return Padding(
-                                      key: ValueKey('rot_${item.id}'),
-                                      padding: const EdgeInsets.only(
-                                        bottom: 8,
-                                      ),
-                                      child: Material(
-                                        color: isNext
-                                            ? p.accent.withValues(alpha: 0.10)
-                                            : p.bg.withValues(alpha: 0.35),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius:
-                                              BorderRadius.circular(14),
-                                          side: BorderSide(
-                                            color: isNext
-                                                ? p.accent.withValues(
-                                                    alpha: 0.7,
-                                                  )
-                                                : p.hairline,
-                                            width: isNext ? 1.6 : 1,
-                                          ),
-                                        ),
-                                        child: InkWell(
-                                          borderRadius:
-                                              BorderRadius.circular(14),
-                                          onTap: () {
-                                            rot.setNext(item.id);
-                                            changed();
-                                          },
-                                          child: Padding(
-                                            padding: const EdgeInsets.fromLTRB(
-                                              10,
-                                              8,
-                                              4,
-                                              8,
-                                            ),
-                                            child: Row(
-                                              children: [
-                                                Container(
-                                                  width: 30,
-                                                  height: 30,
-                                                  alignment: Alignment.center,
-                                                  decoration: BoxDecoration(
-                                                    shape: BoxShape.circle,
-                                                    color: isNext
-                                                        ? p.accent
-                                                        : Colors.transparent,
-                                                    border: Border.all(
-                                                      color: isNext
-                                                          ? p.accent
-                                                          : p.hairline,
-                                                    ),
-                                                  ),
-                                                  child: Text(
-                                                    '${i + 1}',
-                                                    style: TextStyle(
-                                                      fontWeight:
-                                                          FontWeight.w800,
-                                                      color: isNext
-                                                          ? p.bg
-                                                          : p.accent,
-                                                    ),
-                                                  ),
-                                                ),
-                                                const SizedBox(width: 12),
-                                                Expanded(
-                                                  child: Column(
-                                                    crossAxisAlignment:
-                                                        CrossAxisAlignment
-                                                            .start,
-                                                    children: [
-                                                      if (isNext)
-                                                        Text(
-                                                          'ALS NÄCHSTES',
-                                                          style: TextStyle(
-                                                            fontSize: 10.5,
-                                                            fontWeight:
-                                                                FontWeight
-                                                                    .w800,
-                                                            letterSpacing: 1.4,
-                                                            color: p.accent,
-                                                          ),
-                                                        ),
-                                                      Text(
-                                                        item.title,
-                                                        maxLines: 2,
-                                                        overflow: TextOverflow
-                                                            .ellipsis,
-                                                        style: TextStyle(
-                                                          color: p.text,
-                                                          fontWeight:
-                                                              FontWeight.w700,
-                                                          fontSize: 15,
-                                                        ),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                ),
-                                                IconButton(
-                                                  tooltip: 'Entfernen',
-                                                  icon: Icon(
-                                                    Icons
-                                                        .delete_outline_rounded,
-                                                    color: p.muted,
-                                                  ),
-                                                  onPressed: () {
-                                                    rot.remove(item.id);
-                                                    changed();
-                                                  },
-                                                ),
-                                                ReorderableDragStartListener(
-                                                  index: i,
-                                                  child: Padding(
-                                                    padding:
-                                                        const EdgeInsets.all(
-                                                          8,
-                                                        ),
-                                                    child: Icon(
-                                                      Icons.drag_handle_rounded,
-                                                      color: p.muted
-                                                          .withValues(
-                                                            alpha: 0.6,
-                                                          ),
-                                                    ),
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                ),
-                              ),
-                            const SizedBox(height: 8),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: TextField(
-                                    controller: addCtrl,
-                                    textInputAction: TextInputAction.done,
-                                    textCapitalization:
-                                        TextCapitalization.sentences,
-                                    decoration: InputDecoration(
-                                      hintText: 'Neues Projekt …',
-                                      hintStyle: TextStyle(color: p.muted),
-                                      filled: true,
-                                      fillColor: p.bg.withValues(alpha: 0.35),
-                                      isDense: true,
-                                      border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(14),
-                                        borderSide: BorderSide(
-                                          color: p.hairline,
-                                        ),
-                                      ),
-                                    ),
-                                    onSubmitted: (_) => addFromField(),
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                FilledButton(
-                                  onPressed: addFromField,
-                                  child: const Icon(Icons.add_rounded),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 10),
-                            Text(
-                              'Tipp: Leg im Plan einen Block mit dem Titel „Projekt-Session“ an.',
-                              style: Theme.of(context).textTheme.labelSmall
-                                  ?.copyWith(color: p.muted),
-                            ),
-                          ],
-                        ),
+              return _sheetFrame(sheetCtx, [
+                Row(
+                  children: [
+                    Icon(Icons.autorenew_rounded, color: p.text),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Projekt-Rotation',
+                        style: Theme.of(context).textTheme.titleLarge
+                            ?.copyWith(fontWeight: FontWeight.w800),
                       ),
                     ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Jede Projekt-Session zeigt das nächste Projekt. Erledigt → das nächste ist dran, '
+                  'nach dem letzten geht es von vorn los. Tippen zeigt Verlauf & Notizen, '
+                  'ziehen ändert die Reihenfolge.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: p.muted,
+                    height: 1.35,
                   ),
                 ),
-              );
+                const SizedBox(height: 12),
+                FilledButton.icon(
+                  onPressed: () {
+                    addSession = true;
+                    Navigator.pop(sheetCtx);
+                  },
+                  icon: const Icon(Icons.add_rounded),
+                  label: const Text('Projekt-Session zum Plan hinzufügen'),
+                ),
+                const SizedBox(height: 14),
+                if (rot.items.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    child: Text(
+                      'Noch keine Projekte. Füge unten z. B. Programmieren, Klavier, Portugiesisch hinzu.',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: p.muted,
+                      ),
+                    ),
+                  )
+                else
+                  ReorderableListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    buildDefaultDragHandles: false,
+                    itemCount: rot.items.length,
+                    onReorder: (o, n) {
+                      rot.reorder(o, n);
+                      changed();
+                    },
+                    itemBuilder: (c, i) {
+                      final item = rot.items[i];
+                      final isNext = next?.id == item.id;
+                      return Padding(
+                        key: ValueKey('rot_${item.id}'),
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Material(
+                          color: isNext
+                              ? p.accent.withValues(alpha: 0.10)
+                              : p.bg.withValues(alpha: 0.35),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            side: BorderSide(
+                              color: isNext
+                                  ? p.accent.withValues(alpha: 0.7)
+                                  : p.hairline,
+                              width: isNext ? 1.6 : 1,
+                            ),
+                          ),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(14),
+                            onTap: () async {
+                              await _openProjectLogSheet(item);
+                              setLocal(() {});
+                            },
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(10, 8, 4, 8),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: 30,
+                                    height: 30,
+                                    alignment: Alignment.center,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: isNext
+                                          ? p.accent
+                                          : Colors.transparent,
+                                      border: Border.all(
+                                        color: isNext ? p.accent : p.hairline,
+                                      ),
+                                    ),
+                                    child: Text(
+                                      '${i + 1}',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w800,
+                                        color: isNext ? p.bg : p.accent,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        if (isNext)
+                                          Text(
+                                            'ALS NÄCHSTES',
+                                            style: TextStyle(
+                                              fontSize: 10.5,
+                                              fontWeight: FontWeight.w800,
+                                              letterSpacing: 1.4,
+                                              color: p.accent,
+                                            ),
+                                          ),
+                                        Text(
+                                          item.title,
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            color: p.text,
+                                            fontWeight: FontWeight.w700,
+                                            fontSize: 15,
+                                          ),
+                                        ),
+                                        Text(
+                                          'Zuletzt: ${lastDoneLabel(rot.lastDone(item.id))}',
+                                          style: TextStyle(
+                                            color: p.muted,
+                                            fontSize: 12.5,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  IconButton(
+                                    tooltip: 'Entfernen',
+                                    icon: Icon(
+                                      Icons.delete_outline_rounded,
+                                      color: p.muted,
+                                    ),
+                                    onPressed: () {
+                                      rot.remove(item.id);
+                                      changed();
+                                    },
+                                  ),
+                                  ReorderableDragStartListener(
+                                    index: i,
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(8),
+                                      child: Icon(
+                                        Icons.drag_handle_rounded,
+                                        color: p.muted.withValues(alpha: 0.6),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: addCtrl,
+                        textInputAction: TextInputAction.done,
+                        textCapitalization: TextCapitalization.sentences,
+                        decoration: InputDecoration(
+                          hintText: 'Neues Projekt …',
+                          hintStyle: TextStyle(color: p.muted),
+                          filled: true,
+                          fillColor: p.bg.withValues(alpha: 0.35),
+                          isDense: true,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide(color: p.hairline),
+                          ),
+                        ),
+                        onSubmitted: (_) => addFromField(),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton.filledTonal(
+                      onPressed: addFromField,
+                      icon: const Icon(Icons.add_rounded),
+                    ),
+                  ],
+                ),
+              ]);
             },
           );
         },
@@ -3963,6 +4295,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
     } finally {
       addCtrl.dispose();
     }
+    if (addSession && mounted) _addProjectSessionBlock();
   }
 
   Future<void> _openReminderPrefsSheet() async {
@@ -7101,6 +7434,8 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
     void cardPrimaryTap() {
       if (_flexMode) {
         _toggleBlockSelect(block.id);
+      } else if (_isProjectSessionBlock(block)) {
+        unawaited(_openProjectSessionSheet(block));
       } else {
         _openEditBlockDialog(block);
       }
@@ -9386,6 +9721,38 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                                                   ),
                                                   maxLines: 2,
                                                 ),
+                                                if (editing == null)
+                                                  Padding(
+                                                    padding:
+                                                        const EdgeInsets.only(
+                                                          top: 4,
+                                                        ),
+                                                    child: ActionChip(
+                                                      avatar: Icon(
+                                                        Icons.autorenew_rounded,
+                                                        size: 16,
+                                                        color: p.accent,
+                                                      ),
+                                                      label: const Text(
+                                                        'Projekt-Session',
+                                                      ),
+                                                      onPressed: () =>
+                                                          setSheet(() {
+                                                        titleCtrl.text =
+                                                            'Projekt-Session';
+                                                        if (_categoryColors
+                                                            .containsKey(
+                                                              'Fokus',
+                                                            )) {
+                                                          colorLabel = 'Fokus';
+                                                        }
+                                                        draftCustomIconCode =
+                                                            Icons
+                                                                .autorenew_rounded
+                                                                .codePoint;
+                                                      }),
+                                                    ),
+                                                  ),
                                                 const SizedBox(height: 4),
                                               ],
                                             ),
