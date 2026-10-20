@@ -3400,7 +3400,6 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
     final rawH = (e - s) * ppm;
     final h = max(rawH - 3, 20.0);
     final compact = h < 44;
-    final roomy = h >= 72;
     final twoLineTitle = h >= 92;
     final edge = mealVis ? MealBlockTheme.outline : stripe;
     final fill = mealVis
@@ -3417,6 +3416,8 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
         '${_fmtMin(block.startMin)}–${_fmtMin(block.endMin % 1440)} · ${_fmtGridDur(dur)}';
     final isProject = _isProjectSessionBlock(block);
     final projectName = isProject ? _projectSessionLabel(block) : null;
+    final shownTitle = projectName ?? block.title;
+    final shownTime = isProject ? 'Projekt-Session · $timeLabel' : timeLabel;
 
     Widget check() => GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -3443,7 +3444,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
     );
 
     final title = Text(
-      block.title,
+      shownTitle,
       maxLines: twoLineTitle ? 2 : 1,
       overflow: TextOverflow.ellipsis,
       style: Theme.of(context).textTheme.titleSmall?.copyWith(
@@ -3521,7 +3522,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                               title,
                               const SizedBox(height: 2),
                               Text(
-                                timeLabel,
+                                shownTime,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: Theme.of(context).textTheme.labelSmall
@@ -3532,23 +3533,6 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                                       ],
                                     ),
                               ),
-                              if (isProject && roomy) ...[
-                                const SizedBox(height: 5),
-                                Text(
-                                    projectName == null
-                                        ? 'Projekte festlegen'
-                                        : (done
-                                              ? '✓ $projectName'
-                                              : 'Als Nächstes · $projectName'),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: Theme.of(context).textTheme.labelSmall
-                                        ?.copyWith(
-                                          color: p.accent,
-                                          fontWeight: FontWeight.w800,
-                                        ),
-                                  ),
-                              ],
                             ],
                           ),
                         ),
@@ -3742,12 +3726,18 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
     _schedulePersistDayPlans();
     unawaited(_syncReminders());
     final next = _projectSessionLabel(block);
+    final pushed = start == null;
     ScaffoldMessenger.maybeOf(context)?.showSnackBar(
       SnackBar(
+        duration: Duration(seconds: pushed ? 6 : 4),
         content: Text(
           'Projekt-Session ${_fmtMin(block.startMin)}–${_fmtMin(block.endMin % 1440)} hinzugefügt'
-          '${next != null ? ' · $next' : ''}',
+          '${next != null ? ' · $next' : ''}'
+          '${pushed ? '\nKein freier Platz – folgende Blöcke 1 h nach hinten verschoben.' : ''}',
         ),
+        action: pushed
+            ? SnackBarAction(label: 'Rückgängig', onPressed: _undoLastChange)
+            : null,
       ),
     );
   }
@@ -4064,6 +4054,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
 
   Future<void> _openProjectRotationSheet() async {
     final addCtrl = TextEditingController();
+    final addFocus = FocusNode();
     var addSession = false;
     try {
       await showModalBottomSheet<void>(
@@ -4087,6 +4078,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                 rot.add(addCtrl.text);
                 addCtrl.clear();
                 changed();
+                addFocus.requestFocus();
               }
 
               return _sheetFrame(sheetCtx, [
@@ -4264,6 +4256,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                     Expanded(
                       child: TextField(
                         controller: addCtrl,
+                        focusNode: addFocus,
                         textInputAction: TextInputAction.done,
                         textCapitalization: TextCapitalization.sentences,
                         decoration: InputDecoration(
@@ -4294,6 +4287,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
       );
     } finally {
       addCtrl.dispose();
+      addFocus.dispose();
     }
     if (addSession && mounted) _addProjectSessionBlock();
   }
