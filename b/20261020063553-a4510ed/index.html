@@ -14,7 +14,7 @@
     This is a placeholder for base href that will be replaced by the value of
     the `--base-href` argument provided to `flutter build`.
   -->
-  <base href="/sol-planner/b/20261019082515-0f2e05b/">
+  <base href="/sol-planner/b/20261020063553-a4510ed/">
 
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -24,7 +24,7 @@
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SOL Planner">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 
@@ -32,12 +32,10 @@
   <link rel="icon" type="image/png" href="favicon.png"/>
 
   <title>SOL Planner</title>
-  <meta name="theme-color" content="#000000">
+  <meta name="theme-color" content="#121212">
   <style>
-    html,body{background:#000;margin:0;height:100%;overflow:hidden}
-    /* App-Fläche endet über der Home-Leiste und unter der Statusleiste (iPhone-Ränder). */
-    #flutter_host{position:fixed;left:env(safe-area-inset-left,0px);right:env(safe-area-inset-right,0px);
-      top:env(safe-area-inset-top,0px);bottom:env(safe-area-inset-bottom,0px)}
+    html,body{background:#121212;margin:0;height:100%;overflow:hidden}
+    #flutter_host{position:fixed;inset:0}
   </style>
   <link rel="manifest" href="manifest.json">
 </head>
@@ -51,6 +49,25 @@
     * https://docs.flutter.dev/platform-integration/web/initialization
   -->
   <div id="flutter_host"></div>
+  <script>
+    // Ränder des iPhones (Statusleiste, Home-Leiste) messen und an die App geben.
+    (function () {
+      var p = document.createElement('div');
+      p.style.cssText = 'position:fixed;visibility:hidden;pointer-events:none;' +
+        'padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)';
+      document.documentElement.appendChild(p);
+      function upd() {
+        var c = getComputedStyle(p);
+        window.solSafeTop = parseFloat(c.paddingTop) || 0;
+        window.solSafeRight = parseFloat(c.paddingRight) || 0;
+        window.solSafeBottom = parseFloat(c.paddingBottom) || 0;
+        window.solSafeLeft = parseFloat(c.paddingLeft) || 0;
+      }
+      upd();
+      window.addEventListener('resize', upd);
+      window.addEventListener('orientationchange', function () { setTimeout(upd, 300); });
+    })();
+  </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>
