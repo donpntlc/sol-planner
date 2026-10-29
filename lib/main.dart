@@ -7306,6 +7306,8 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
         ? _slotElapsedFractionWhileLive(block)
         : (pastFilled ? 1.0 : null);
     final activeLiveForeground = (isLiveNow || pastFilled) && !mealVis;
+    // Zeitspalte + Icon-Leiste liegen außerhalb der Füllung: nur der laufende Block wird hervorgehoben.
+    final railLive = isLiveNow && !mealVis;
     final liveLightUi = activeLiveForeground && !p.isDark;
     /// Nur lesen wenn [activeLiveForeground] — sonst [Colors.transparent] (Dummy).
     final Color liveInk =
@@ -7451,7 +7453,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
     final Color cardEdgeColor = openFreizeitSlot ? slotGreyBorder : borderLine;
     final Color railLineClr =
         openFreizeitSlot ? p.muted.withValues(alpha: 0.52) : lineClr;
-    final Color railIconFg = activeLiveForeground
+    final Color railIconFg = railLive
         ? liveInk
         : (openFreizeitSlot
               ? p.muted.withValues(alpha: 0.52)
@@ -7538,7 +7540,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                                           ],
                                           fontWeight: FontWeight.w700,
                                           letterSpacing: 0,
-                                          color: activeLiveForeground
+                                          color: railLive
                                               ? liveInk
                                               : p.muted,
                                           height: 1,
@@ -7555,7 +7557,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                                             FontFeature.tabularFigures(),
                                           ],
                                           fontWeight: FontWeight.w500,
-                                          color: activeLiveForeground
+                                          color: railLive
                                               ? liveSoft
                                               : p.muted.withValues(alpha: 0.75),
                                           height: 1,
@@ -7611,7 +7613,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                                       minWidth: tightPhone ? 32 : 36,
                                     ),
                                     decoration: BoxDecoration(
-                                      color: activeLiveForeground
+                                      color: railLive
                                           ? (liveLightUi
                                               ? stripe.withValues(alpha: 0.14)
                                               : Colors.white.withValues(alpha: 0.12))
@@ -7620,7 +7622,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                                               : p.surface,
                                       borderRadius: BorderRadius.circular(10),
                                       border: Border.all(
-                                        color: activeLiveForeground
+                                        color: railLive
                                             ? (liveLightUi
                                                 ? stripe.withValues(alpha: 0.72)
                                                 : Colors.white.withValues(alpha: 0.82))
