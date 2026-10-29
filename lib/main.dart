@@ -3397,6 +3397,9 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
     final mealVis = _useMealVisualFor(block);
     final live = _isWallClockActiveBlock(block);
     final done = block.completed;
+    final gridFillFrac = live
+        ? _slotElapsedFractionWhileLive(block)
+        : (_isBlockPast(block) ? 1.0 : null);
     final rawH = (e - s) * ppm;
     final h = max(rawH - 3, 20.0);
     final compact = h < 44;
@@ -3494,7 +3497,20 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                     ]
                   : null,
             ),
-            child: ClipRect(
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                if (gridFillFrac != null && gridFillFrac > 0.001)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: _liveProgressStripeFill(
+                        fraction: gridFillFrac.clamp(0.0, 1.0),
+                        stripe: edge,
+                        clipCornerRadius: 11,
+                      ),
+                    ),
+                  ),
+                ClipRect(
               child: Padding(
               padding: EdgeInsets.fromLTRB(8, compact ? 2 : 7, 8, compact ? 2 : 6),
               child: compact
@@ -3547,6 +3563,8 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                       ],
                     ),
               ),
+            ),
+              ],
             ),
           ),
         ),
@@ -6927,6 +6945,18 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
   }
 
   /// Streifen-Verlauf; [clipCornerRadius] ≈ Innenkante der Karte (leicht erweitert gegen Anti-Alias-Lücken).
+  /// Block liegt komplett in der Vergangenheit (→ voll gefüllt dargestellt).
+  bool _isBlockPast(TimeBlock b) {
+    if (b.allDay) return false;
+    final now = DateTime.now();
+    final today = _onlyDay(now);
+    final day = _onlyDay(_selectedDate);
+    if (day.isBefore(today)) return true;
+    if (day.isAfter(today)) return false;
+    if (!b.isLinearSlot) return false;
+    return b.endMin <= now.hour * 60 + now.minute;
+  }
+
   Widget _liveProgressStripeFill({
     required double fraction,
     required Color stripe,
@@ -7270,10 +7300,12 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
         ? _openDeepWorkTodos()
         : const <DeepWorkTodoItem>[];
     final deepTodoCount = deepTodos.length;
+    // Vergangene Blöcke sind komplett gefüllt, der laufende anteilig; Schein nur beim laufenden.
+    final pastFilled = !isLiveNow && _isBlockPast(block);
     final liveFillFrac = isLiveNow
         ? _slotElapsedFractionWhileLive(block)
-        : null;
-    final activeLiveForeground = isLiveNow && !mealVis;
+        : (pastFilled ? 1.0 : null);
+    final activeLiveForeground = (isLiveNow || pastFilled) && !mealVis;
     final liveLightUi = activeLiveForeground && !p.isDark;
     /// Nur lesen wenn [activeLiveForeground] — sonst [Colors.transparent] (Dummy).
     final Color liveInk =
