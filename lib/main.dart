@@ -9578,6 +9578,346 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
               color: p.hairline.withValues(alpha: 0.85),
             );
 
+            Widget infoRow({
+              required IconData icon,
+              required String title,
+              String? trailing,
+              VoidCallback? onTap,
+            }) {
+              return InkWell(
+                onTap: onTap,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 15,
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(icon, size: 22, color: p.accent),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Text(
+                          title,
+                          style: Theme.of(context).textTheme.bodyLarge
+                              ?.copyWith(
+                                fontWeight: FontWeight.w600,
+                                color: p.text,
+                              ),
+                        ),
+                      ),
+                      if (trailing != null)
+                        Text(
+                          trailing,
+                          style: TextStyle(color: p.muted, fontSize: 15),
+                        ),
+                      if (onTap != null) ...[
+                        const SizedBox(width: 4),
+                        Icon(Icons.chevron_right_rounded, color: p.muted),
+                      ],
+                    ],
+                  ),
+                ),
+              );
+            }
+
+            Widget insetDivider() => Padding(
+              padding: const EdgeInsets.only(left: 52),
+              child: Divider(
+                height: 1,
+                thickness: 1,
+                color: p.hairline.withValues(alpha: 0.85),
+              ),
+            );
+
+            Future<void> openColorSheet() async {
+              final outerSet = setSheet;
+              await showModalBottomSheet<void>(
+                context: context,
+                isScrollControlled: true,
+                backgroundColor: Colors.transparent,
+                builder: (cctx) {
+                  return StatefulBuilder(
+                    builder: (context, setPal) {
+                      void setSheet(VoidCallback f) {
+                        outerSet(f);
+                        setPal(() {});
+                      }
+
+                      final p = context.palette;
+                      return _sheetFrame(cctx, [
+                                      Text(
+                                        'Kategorie',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .labelLarge
+                                            ?.copyWith(
+                                              fontWeight: FontWeight.w700,
+                                              color: p.muted,
+                                            ),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Wrap(
+                                        spacing: 8,
+                                        runSpacing: 8,
+                                        children: [
+                                          for (final k in _categoryOrder.where(
+                                            (k) => _categoryColors.containsKey(k),
+                                          ))
+                                            ChoiceChip(
+                                              showCheckmark: false,
+                                              avatar: Container(
+                                                width: 10,
+                                                height: 10,
+                                                decoration: BoxDecoration(
+                                                  color: _categoryColors[k],
+                                                  shape: BoxShape.circle,
+                                                ),
+                                              ),
+                                              label: Text(k),
+                                              selected: colorLabel == k,
+                                              selectedColor:
+                                                  (_categoryColors[k] ?? p.accent)
+                                                      .withValues(alpha: 0.25),
+                                              side: BorderSide(
+                                                color: colorLabel == k
+                                                    ? (_categoryColors[k] ??
+                                                          p.accent)
+                                                    : p.hairline,
+                                              ),
+                                              onSelected: (_) => setSheet(
+                                                () => colorLabel = k,
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 12),
+                                      Text(
+                                        'Randfarbe',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .labelLarge
+                                            ?.copyWith(
+                                              fontWeight: FontWeight.w700,
+                                              color: p.muted,
+                                            ),
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: Text(
+                                              useCategoryStripe
+                                                  ? 'Wie Kategorie'
+                                                  : 'Eigene Akzentfarbe',
+                                              style: Theme.of(context)
+                                                  .textTheme
+                                                  .bodySmall
+                                                  ?.copyWith(
+                                                    color: p.text.withValues(
+                                                      alpha: 0.92,
+                                                    ),
+                                                  ),
+                                            ),
+                                          ),
+                                          Switch.adaptive(
+                                            value: useCategoryStripe,
+                                            onChanged: (v) {
+                                              setSheet(() {
+                                                useCategoryStripe = v;
+                                                if (v) {
+                                                  draftCustomStripeHex = null;
+                                                } else {
+                                                  draftCustomStripeHex ??=
+                                                      _colorToHexArgb(
+                                                        _stripeColor(
+                                                          colorLabel,
+                                                        ),
+                                                      );
+                                                }
+                                              });
+                                            },
+                                          ),
+                                        ],
+                                      ),
+                                      if (!useCategoryStripe) ...[
+                                        const SizedBox(height: 8),
+                                        Align(
+                                          alignment: Alignment.centerRight,
+                                          child: IconButton(
+                                            tooltip:
+                                                'Randfarbe frei wählen — Farbplatte & Regenbogen',
+                                            visualDensity:
+                                                VisualDensity.compact,
+                                            onPressed: () async {
+                                              final start =
+                                                  draftCustomStripeHex != null
+                                                  ? _colorFromHexString(
+                                                      draftCustomStripeHex!,
+                                                    )
+                                                  : _stripeColor(colorLabel);
+                                              final picked =
+                                                  await _pickStripeColorFromFullPalette(
+                                                    start,
+                                                  );
+                                              if (picked == null || !mounted)
+                                                return;
+                                              final pickedHex = _colorToHexArgb(
+                                                picked,
+                                              );
+                                              setSheet(() {
+                                                draftCustomStripeHex =
+                                                    pickedHex;
+                                              });
+                                              final exists =
+                                                  _customStripeSwatches.any(
+                                                    (x) =>
+                                                        x.toARGB32() ==
+                                                        picked.toARGB32(),
+                                                  );
+                                              if (!exists &&
+                                                  !_isBuiltinStripeSwatch(
+                                                    picked,
+                                                  )) {
+                                                setState(() {
+                                                  _customStripeSwatches.add(
+                                                    picked,
+                                                  );
+                                                });
+                                                await _saveCustomStripeSwatches();
+                                              }
+                                            },
+                                            icon: Icon(
+                                              Icons.add_circle_outline,
+                                              color: p.accent,
+                                            ),
+                                          ),
+                                        ),
+                                        Wrap(
+                                          spacing: 8,
+                                          runSpacing: 8,
+                                          children: [
+                                            for (final c
+                                                in _allStripeSwatches())
+                                              Builder(
+                                                builder: (_) {
+                                                  final isCustom =
+                                                      !_isBuiltinStripeSwatch(
+                                                        c,
+                                                      );
+                                                  final isActive =
+                                                      draftCustomStripeHex ==
+                                                      _colorToHexArgb(c);
+                                                  return GestureDetector(
+                                                    onTap: () => setSheet(
+                                                      () =>
+                                                          draftCustomStripeHex =
+                                                              _colorToHexArgb(
+                                                                c,
+                                                              ),
+                                                    ),
+                                                    child: Stack(
+                                                      clipBehavior: Clip.none,
+                                                      children: [
+                                                        Container(
+                                                          width: 32,
+                                                          height: 32,
+                                                          decoration: BoxDecoration(
+                                                            color: c,
+                                                            shape:
+                                                                BoxShape.circle,
+                                                            border: Border.all(
+                                                              color: isActive
+                                                                  ? p.accent
+                                                                  : p.hairline
+                                                                        .withValues(
+                                                                          alpha:
+                                                                              0.55,
+                                                                        ),
+                                                              width: isActive
+                                                                  ? 2.6
+                                                                  : 1,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                        if (isCustom)
+                                                          Positioned(
+                                                            right: -4,
+                                                            top: -4,
+                                                            child: GestureDetector(
+                                                              onTap: () async {
+                                                                setState(() {
+                                                                  _customStripeSwatches
+                                                                      .removeWhere(
+                                                                        (x) =>
+                                                                            x.toARGB32() ==
+                                                                            c.toARGB32(),
+                                                                      );
+                                                                });
+                                                                if (draftCustomStripeHex ==
+                                                                    _colorToHexArgb(
+                                                                      c,
+                                                                    )) {
+                                                                  setSheet(() {
+                                                                    draftCustomStripeHex =
+                                                                        _colorToHexArgb(
+                                                                          _stripeColor(
+                                                                            colorLabel,
+                                                                          ),
+                                                                        );
+                                                                  });
+                                                                }
+                                                                await _saveCustomStripeSwatches();
+                                                              },
+                                                              child: Container(
+                                                                width: 16,
+                                                                height: 16,
+                                                                decoration: BoxDecoration(
+                                                                  color:
+                                                                      p.surface,
+                                                                  shape: BoxShape
+                                                                      .circle,
+                                                                  border: Border.all(
+                                                                    color: p
+                                                                        .hairline,
+                                                                  ),
+                                                                ),
+                                                                child: Icon(
+                                                                  Icons
+                                                                      .close_rounded,
+                                                                  size: 11,
+                                                                  color:
+                                                                      p.muted,
+                                                                ),
+                                                              ),
+                                                            ),
+                                                          ),
+                                                      ],
+                                                    ),
+                                                  );
+                                                },
+                                              ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          'Eigene Farben: + hinzufügen, X löschen',
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .labelSmall
+                                              ?.copyWith(
+                                                color: p.muted.withValues(
+                                                  alpha: 0.9,
+                                                ),
+                                              ),
+                                        ),
+                                      ],
+                      ]);
+                    },
+                  );
+                },
+              );
+            }
+
             return Padding(
               padding: EdgeInsets.only(bottom: padBottom),
               child: Align(
@@ -9591,225 +9931,83 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                     height: maxH,
                     child: Column(
                       children: [
-                        const SizedBox(height: 10),
-                        Container(
-                          width: 40,
-                          height: 4,
-                          decoration: BoxDecoration(
-                            color: p.hairline,
-                            borderRadius: BorderRadius.circular(99),
-                          ),
-                        ),
                         Expanded(
                           child: SingleChildScrollView(
-                            padding: const EdgeInsets.fromLTRB(18, 14, 18, 8),
+                            padding: const EdgeInsets.only(bottom: 8),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
-                                Container(
-                                  padding: const EdgeInsets.all(16),
-                                  decoration: BoxDecoration(
-                                    color: heroBg,
-                                    borderRadius: BorderRadius.circular(18),
-                                    border: Border.all(color: p.hairline),
-                                  ),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
+                                Builder(
+                                  builder: (context) {
+                                    final accentCol =
+                                        (!useCategoryStripe &&
+                                            draftCustomStripeHex != null)
+                                        ? _colorFromHexString(
+                                            draftCustomStripeHex!,
+                                          )
+                                        : _stripeColor(colorLabel);
+                                    final headBg = Color.alphaBlend(
+                                      accentCol.withValues(
+                                        alpha: p.isDark ? 0.42 : 0.30,
+                                      ),
+                                      p.bg,
+                                    );
+                                    final btnBg = Color.alphaBlend(
+                                      Colors.black.withValues(alpha: 0.28),
+                                      headBg,
+                                    );
+                                    Widget roundBtn(Widget child) => Container(
+                                      width: 44,
+                                      height: 44,
+                                      decoration: BoxDecoration(
+                                        color: btnBg,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      alignment: Alignment.center,
+                                      child: child,
+                                    );
+                                    return Container(
+                                      color: headBg,
+                                      padding: const EdgeInsets.fromLTRB(
+                                        16,
+                                        10,
+                                        16,
+                                        22,
+                                      ),
+                                      child: Column(
                                         crossAxisAlignment:
                                             CrossAxisAlignment.start,
                                         children: [
-                                          SizedBox(
-                                            width: 52,
-                                            child: Align(
-                                              alignment: Alignment.topCenter,
-                                              child: Material(
-                                                color: Colors.transparent,
-                                                child: InkWell(
-                                                  onTap: () {
-                                                    _showPlannerIconPicker(
-                                                      currentCode:
-                                                          draftCustomIconCode,
-                                                      onPicked: (c) => setSheet(
-                                                        () =>
-                                                            draftCustomIconCode =
-                                                                c,
-                                                      ),
-                                                    );
-                                                  },
-                                                  borderRadius:
-                                                      BorderRadius.circular(12),
-                                                  child: Container(
-                                                    height: 52,
-                                                    width: 52,
-                                                    decoration: BoxDecoration(
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                            12,
-                                                          ),
-                                                      border: Border.all(
-                                                        color:
-                                                            _draftUseMealVisual(
-                                                              colorLabel,
-                                                              useCategoryStripe
-                                                                  ? null
-                                                                  : draftCustomStripeHex,
-                                                            )
-                                                            ? MealBlockTheme
-                                                                  .outline
-                                                                  .withValues(
-                                                                    alpha: MealBlockTheme
-                                                                        .pillBorderAlpha,
-                                                                  )
-                                                            : p.hairline,
-                                                      ),
-                                                      color:
-                                                          _draftUseMealVisual(
-                                                            colorLabel,
-                                                            useCategoryStripe
-                                                                ? null
-                                                                : draftCustomStripeHex,
-                                                          )
-                                                          ? Color.alphaBlend(
-                                                              MealBlockTheme
-                                                                  .fillBase
-                                                                  .withValues(
-                                                                    alpha: MealBlockTheme
-                                                                        .pillFillAlpha,
-                                                                  ),
-                                                              p.surface,
-                                                            )
-                                                          : p.surface,
-                                                    ),
-                                                    alignment: Alignment.center,
-                                                    child: Icon(
-                                                      _draftBlockIcon(
-                                                        colorLabel,
-                                                        draftCustomIconCode,
-                                                      ),
-                                                      size: 26,
-                                                      color:
-                                                          _draftUseMealVisual(
-                                                            colorLabel,
-                                                            useCategoryStripe
-                                                                ? null
-                                                                : draftCustomStripeHex,
-                                                          )
-                                                          ? MealBlockTheme
-                                                                .outline
-                                                                .withValues(
-                                                                  alpha: 0.82,
-                                                                )
-                                                          : p.muted.withValues(
-                                                              alpha: 0.88,
-                                                            ),
-                                                    ),
-                                                  ),
+                                          Center(
+                                            child: Container(
+                                              width: 40,
+                                              height: 4,
+                                              decoration: BoxDecoration(
+                                                color: p.text.withValues(
+                                                  alpha: 0.3,
                                                 ),
+                                                borderRadius:
+                                                    BorderRadius.circular(99),
                                               ),
                                             ),
                                           ),
-                                          const SizedBox(width: 12),
-                                          Expanded(
-                                            child: Column(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              children: [
-                                                Text(
-                                                  allDay
-                                                      ? 'Ganztags · ${_humanDuration(1440)}'
-                                                      : '${_fmtMin(previewStart)} – ${_fmtMin(previewEnd)}${_spanCrossesMidnight(previewStart, previewEnd) ? ' (+1)' : ''} · ${_humanDuration(previewDur)}',
-                                                  style: metaSmall(
-                                                    p.text.withValues(
-                                                      alpha: 0.82,
-                                                    ),
-                                                  ),
-                                                ),
-                                                const SizedBox(height: 8),
-                                                TextField(
-                                                  controller: titleCtrl,
-                                                  style: Theme.of(context)
-                                                      .textTheme
-                                                      .headlineSmall
-                                                      ?.copyWith(
-                                                        fontWeight:
-                                                            FontWeight.w800,
-                                                        letterSpacing: -0.5,
-                                                        color: p.text,
-                                                        fontSize: 22,
-                                                      ),
-                                                  decoration: InputDecoration(
-                                                    isDense: true,
-                                                    border: InputBorder.none,
-                                                    hintText: 'Titel',
-                                                    hintStyle: TextStyle(
-                                                      color: p.muted,
-                                                    ),
-                                                  ),
-                                                  maxLines: 2,
-                                                ),
-                                                if (editing == null)
-                                                  Padding(
-                                                    padding:
-                                                        const EdgeInsets.only(
-                                                          top: 4,
-                                                        ),
-                                                    child: ActionChip(
-                                                      avatar: Icon(
-                                                        Icons.autorenew_rounded,
-                                                        size: 16,
-                                                        color: p.accent,
-                                                      ),
-                                                      label: const Text(
-                                                        'Projekt-Session',
-                                                      ),
-                                                      onPressed: () =>
-                                                          setSheet(() {
-                                                        titleCtrl.text =
-                                                            'Projekt-Session';
-                                                        if (_categoryColors
-                                                            .containsKey(
-                                                              'Fokus',
-                                                            )) {
-                                                          colorLabel = 'Fokus';
-                                                        }
-                                                        draftCustomIconCode =
-                                                            Icons
-                                                                .autorenew_rounded
-                                                                .codePoint;
-                                                      }),
-                                                    ),
-                                                  ),
-                                                if (editing != null)
-                                                  Padding(
-                                                    padding:
-                                                        const EdgeInsets.only(
-                                                          top: 6,
-                                                        ),
-                                                    child: FilterChip(
-                                                      label: Text(
-                                                        completed
-                                                            ? 'Erledigt'
-                                                            : 'Als erledigt markieren',
-                                                      ),
-                                                      selected: completed,
-                                                      onSelected: (v) =>
-                                                          setSheet(
-                                                            () => completed = v,
-                                                          ),
-                                                    ),
-                                                  ),
-                                                const SizedBox(height: 4),
-                                              ],
-                                            ),
-                                          ),
-                                          Column(
+                                          const SizedBox(height: 8),
+                                          Row(
                                             children: [
-                                              Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
+                                              roundBtn(
+                                                IconButton(
+                                                  tooltip: 'Schließen',
+                                                  onPressed: () =>
+                                                      Navigator.pop(context),
+                                                  icon: Icon(
+                                                    Icons.close_rounded,
+                                                    color: p.text,
+                                                  ),
+                                                ),
+                                              ),
+                                              const Spacer(),
+                                              if (editing != null)
+                                                roundBtn(
                                                   PopupMenuButton<String>(
                                                     icon: Icon(
                                                       Icons.more_horiz,
@@ -9876,82 +10074,275 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                                                         ),
                                                     ],
                                                   ),
-                                                  IconButton(
-                                                    visualDensity:
-                                                        VisualDensity.compact,
-                                                    onPressed: () =>
-                                                        Navigator.pop(context),
-                                                    icon: Icon(
-                                                      Icons.close_rounded,
+                                                ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 16),
+                                          Row(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.center,
+                                            children: [
+                                              SizedBox(
+                                                width: 74,
+                                                height: 108,
+                                                child: Stack(
+                                                  clipBehavior: Clip.none,
+                                                  children: [
+                                                    Positioned.fill(
+                                                      child: Material(
+                                                        color: accentCol
+                                                            .withValues(
+                                                              alpha: 0.35,
+                                                            ),
+                                                        shape: StadiumBorder(
+                                                          side: BorderSide(
+                                                            color: p.text,
+                                                            width: 3,
+                                                          ),
+                                                        ),
+                                                        child: InkWell(
+                                                          customBorder:
+                                                              const StadiumBorder(),
+                                                          onTap: () {
+                                                            _showPlannerIconPicker(
+                                                              currentCode:
+                                                                  draftCustomIconCode,
+                                                              onPicked: (c) =>
+                                                                  setSheet(
+                                                                    () =>
+                                                                        draftCustomIconCode =
+                                                                            c,
+                                                                  ),
+                                                            );
+                                                          },
+                                                          child: Center(
+                                                            child: Icon(
+                                                              _draftBlockIcon(
+                                                                colorLabel,
+                                                                draftCustomIconCode,
+                                                              ),
+                                                              size: 34,
+                                                              color: p.text,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    Positioned(
+                                                      left: -8,
+                                                      bottom: -8,
+                                                      child: Material(
+                                                        color: btnBg,
+                                                        shape:
+                                                            const CircleBorder(),
+                                                        child: InkWell(
+                                                          customBorder:
+                                                              const CircleBorder(),
+                                                          onTap: () =>
+                                                              openColorSheet(),
+                                                          child: Padding(
+                                                            padding:
+                                                                const EdgeInsets.all(
+                                                                  9,
+                                                                ),
+                                                            child: Icon(
+                                                              Icons
+                                                                  .palette_outlined,
+                                                              size: 20,
+                                                              color: p.text,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                              const SizedBox(width: 18),
+                                              Expanded(
+                                                child: Column(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  children: [
+                                                    Text(
+                                                      allDay
+                                                          ? 'Ganztags'
+                                                          : '${_fmtMin(previewStart)}–${_fmtMin(previewEnd % 1440)} (${_humanDuration(previewDur)})',
+                                                      style: metaSmall(
+                                                        p.text.withValues(
+                                                          alpha: 0.65,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    const SizedBox(height: 4),
+                                                TextField(
+                                                  controller: titleCtrl,
+                                                  style: Theme.of(context)
+                                                      .textTheme
+                                                      .headlineSmall
+                                                      ?.copyWith(
+                                                        fontWeight:
+                                                            FontWeight.w800,
+                                                        letterSpacing: -0.5,
+                                                        color: p.text,
+                                                        fontSize: 22,
+                                                      ),
+                                                  decoration: InputDecoration(
+                                                    isDense: true,
+                                                    border: InputBorder.none,
+                                                    hintText: 'Titel',
+                                                    hintStyle: TextStyle(
                                                       color: p.muted,
                                                     ),
                                                   ),
-                                                ],
+                                                  maxLines: 2,
+                                                ),
+                                                if (editing == null)
+                                                  Padding(
+                                                    padding:
+                                                        const EdgeInsets.only(
+                                                          top: 4,
+                                                        ),
+                                                    child: ActionChip(
+                                                      avatar: Icon(
+                                                        Icons.autorenew_rounded,
+                                                        size: 16,
+                                                        color: p.accent,
+                                                      ),
+                                                      label: const Text(
+                                                        'Projekt-Session',
+                                                      ),
+                                                      onPressed: () =>
+                                                          setSheet(() {
+                                                        titleCtrl.text =
+                                                            'Projekt-Session';
+                                                        if (_categoryColors
+                                                            .containsKey(
+                                                              'Fokus',
+                                                            )) {
+                                                          colorLabel = 'Fokus';
+                                                        }
+                                                        draftCustomIconCode =
+                                                            Icons
+                                                                .autorenew_rounded
+                                                                .codePoint;
+                                                      }),
+                                                    ),
+                                                  ),
+                                                    const SizedBox(height: 6),
+                                                    InkWell(
+                                                      onTap: () =>
+                                                          openColorSheet(),
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                            8,
+                                                          ),
+                                                      child: Padding(
+                                                        padding:
+                                                            const EdgeInsets.symmetric(
+                                                              vertical: 4,
+                                                            ),
+                                                        child: Row(
+                                                          mainAxisSize:
+                                                              MainAxisSize.min,
+                                                          children: [
+                                                            Container(
+                                                              width: 10,
+                                                              height: 10,
+                                                              decoration:
+                                                                  BoxDecoration(
+                                                                    color:
+                                                                        accentCol,
+                                                                    shape: BoxShape
+                                                                        .circle,
+                                                                  ),
+                                                            ),
+                                                            const SizedBox(
+                                                              width: 8,
+                                                            ),
+                                                            Text(
+                                                              colorLabel,
+                                                              style: TextStyle(
+                                                                color: p.text
+                                                                    .withValues(
+                                                                      alpha:
+                                                                          0.8,
+                                                                    ),
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .w600,
+                                                              ),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
                                               ),
+                                              if (editing != null)
+                                                GestureDetector(
+                                                  onTap: () => setSheet(
+                                                    () => completed = !completed,
+                                                  ),
+                                                  child: Padding(
+                                                    padding:
+                                                        const EdgeInsets.only(
+                                                          left: 10,
+                                                        ),
+                                                    child: Container(
+                                                      width: 32,
+                                                      height: 32,
+                                                      decoration: BoxDecoration(
+                                                        shape: BoxShape.circle,
+                                                        border: Border.all(
+                                                          color: p.text,
+                                                          width: 2,
+                                                        ),
+                                                        color: completed
+                                                            ? p.text
+                                                            : null,
+                                                      ),
+                                                      child: completed
+                                                          ? Icon(
+                                                              Icons.check_rounded,
+                                                              size: 20,
+                                                              color: headBg,
+                                                            )
+                                                          : null,
+                                                    ),
+                                                  ),
+                                                ),
                                             ],
                                           ),
                                         ],
                                       ),
-                                      const SizedBox(height: 12),
-                                      Text(
-                                        'Kategorie',
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .labelLarge
-                                            ?.copyWith(
-                                              fontWeight: FontWeight.w700,
-                                              color: p.muted,
-                                            ),
-                                      ),
-                                      const SizedBox(height: 8),
-                                      Wrap(
-                                        spacing: 8,
-                                        runSpacing: 8,
-                                        children: [
-                                          for (final k in _categoryOrder.where(
-                                            (k) => _categoryColors.containsKey(k),
-                                          ))
-                                            ChoiceChip(
-                                              showCheckmark: false,
-                                              avatar: Container(
-                                                width: 10,
-                                                height: 10,
-                                                decoration: BoxDecoration(
-                                                  color: _categoryColors[k],
-                                                  shape: BoxShape.circle,
-                                                ),
-                                              ),
-                                              label: Text(k),
-                                              selected: colorLabel == k,
-                                              selectedColor:
-                                                  (_categoryColors[k] ?? p.accent)
-                                                      .withValues(alpha: 0.25),
-                                              side: BorderSide(
-                                                color: colorLabel == k
-                                                    ? (_categoryColors[k] ??
-                                                          p.accent)
-                                                    : p.hairline,
-                                              ),
-                                              onSelected: (_) => setSheet(
-                                                () => colorLabel = k,
-                                              ),
-                                            ),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
+                                    );
+                                  },
                                 ),
-                                const SizedBox(height: 14),
+                                Padding(
+                                  padding: const EdgeInsets.fromLTRB(
+                                    18,
+                                    14,
+                                    18,
+                                    0,
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: [
                                 Container(
                                   decoration: BoxDecoration(
                                     color: p.surface,
                                     borderRadius: BorderRadius.circular(20),
                                     border: Border.all(color: p.hairline),
-                                    boxShadow: p.cardShadows,
                                   ),
+                                  clipBehavior: Clip.antiAlias,
                                   child: Column(
                                     children: [
-                                      InkWell(
+                                      infoRow(
+                                        icon: Icons.calendar_month_rounded,
+                                        title: _dateSheetHeading(_selectedDate),
                                         onTap: () async {
                                           final picked = await showDatePicker(
                                             context: context,
@@ -9963,75 +10354,16 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                                             _pickDate(picked);
                                           }
                                         },
-                                        borderRadius:
-                                            const BorderRadius.vertical(
-                                              top: Radius.circular(20),
-                                            ),
-                                        child: Padding(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 14,
-                                            vertical: 14,
-                                          ),
-                                          child: Row(
-                                            children: [
-                                              Icon(
-                                                Icons.calendar_today_outlined,
-                                                size: 20,
-                                                color: p.muted,
-                                              ),
-                                              const SizedBox(width: 12),
-                                              Expanded(
-                                                child: Text(
-                                                  _dateSheetHeading(
-                                                    _selectedDate,
-                                                  ),
-                                                  style: Theme.of(context)
-                                                      .textTheme
-                                                      .bodyLarge
-                                                      ?.copyWith(
-                                                        fontWeight:
-                                                            FontWeight.w600,
-                                                        color: p.text,
-                                                      ),
-                                                ),
-                                              ),
-                                              Row(
-                                                children: [
-                                                  Text(
-                                                    'Ganztags',
-                                                    style: Theme.of(context)
-                                                        .textTheme
-                                                        .bodySmall
-                                                        ?.copyWith(
-                                                          color: p.muted,
-                                                          fontWeight:
-                                                              FontWeight.w600,
-                                                        ),
-                                                  ),
-                                                  const SizedBox(width: 8),
-                                                  Switch.adaptive(
-                                                    value: allDay,
-                                                    activeTrackColor: p.muted
-                                                        .withValues(
-                                                          alpha: 0.35,
-                                                        ),
-                                                    onChanged: (v) =>
-                                                        setSheet(() {
-                                                          allDay = v;
-                                                          if (v) {
-                                                            draftStart = 0;
-                                                            draftEnd = 1440;
-                                                          }
-                                                        }),
-                                                  ),
-                                                ],
-                                              ),
-                                            ],
-                                          ),
-                                        ),
                                       ),
-                                      dividerRow(),
-                                      InkWell(
+                                      insetDivider(),
+                                      infoRow(
+                                        icon: Icons.schedule_rounded,
+                                        title: allDay
+                                            ? 'Ganztags'
+                                            : '${_fmtMin(draftStart)} – ${_fmtMin(draftEnd)}${_spanCrossesMidnight(draftStart, draftEnd) ? ' (+1)' : ''}',
+                                        trailing: allDay
+                                            ? null
+                                            : _humanDuration(previewDur),
                                         onTap: allDay
                                             ? null
                                             : () async {
@@ -10040,82 +10372,8 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                                                   await pickEnd(setSheet);
                                                 }
                                               },
-                                        child: Padding(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 14,
-                                            vertical: 14,
-                                          ),
-                                          child: Row(
-                                            children: [
-                                              Expanded(
-                                                child: Text(
-                                                  allDay
-                                                      ? '—'
-                                                      : useDurationInput
-                                                      ? 'Start ${_fmtMin(draftStart)} · Dauer ${durationHours}h ${durationMinutes}m'
-                                                      : '${_fmtMin(draftStart)} – ${_fmtMin(draftEnd)}${_spanCrossesMidnight(draftStart, draftEnd) ? ' (+1)' : ''}',
-                                                  style: Theme.of(context)
-                                                      .textTheme
-                                                      .bodyLarge
-                                                      ?.copyWith(
-                                                        fontWeight:
-                                                            FontWeight.w600,
-                                                        color: allDay
-                                                            ? p.muted
-                                                            : p.text,
-                                                      ),
-                                                ),
-                                              ),
-                                              Icon(
-                                                Icons.schedule_rounded,
-                                                size: 20,
-                                                color: p.muted,
-                                              ),
-                                              const SizedBox(width: 2),
-                                              Icon(
-                                                Icons.chevron_right_rounded,
-                                                color: p.muted,
-                                              ),
-                                            ],
-                                          ),
-                                        ),
                                       ),
-                                      if (!allDay) ...[
-                                        Padding(
-                                          padding: const EdgeInsets.fromLTRB(
-                                            14,
-                                            0,
-                                            14,
-                                            10,
-                                          ),
-                                          child: Row(
-                                            children: [
-                                              ChoiceChip(
-                                                label: const Text('Start/Ende'),
-                                                selected: !useDurationInput,
-                                                onSelected: (v) {
-                                                  if (!v) return;
-                                                  setSheet(
-                                                    () => useDurationInput =
-                                                        false,
-                                                  );
-                                                },
-                                              ),
-                                              const SizedBox(width: 8),
-                                              ChoiceChip(
-                                                label: const Text('Dauer'),
-                                                selected: useDurationInput,
-                                                onSelected: (v) {
-                                                  if (!v) return;
-                                                  setSheet(() {
-                                                    useDurationInput = true;
-                                                    syncDurationFromRange();
-                                                  });
-                                                },
-                                              ),
-                                            ],
-                                          ),
-                                        ),
+                                      if (!allDay)
                                         if (useDurationInput)
                                           Padding(
                                             padding: const EdgeInsets.fromLTRB(
@@ -10238,9 +10496,14 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                                               ],
                                             ),
                                           ),
-                                      ],
-                                      dividerRow(),
-                                      InkWell(
+                                      insetDivider(),
+                                      infoRow(
+                                        icon: Icons.repeat_rounded,
+                                        title: _draftRecurrenceSummary(
+                                          recurrence: recurrence,
+                                          weekdayMask: recurrenceWeekdayMask,
+                                          monthDay: recurrenceMonthDay,
+                                        ),
                                         onTap: () async {
                                           await _showRecurrenceConfigurator(
                                             initialKind: recurrence,
@@ -10256,49 +10519,66 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                                             },
                                           );
                                         },
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                if (!allDay) ...[
+                                  const SizedBox(height: 12),
+                                  Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Material(
+                                      color: muteReminders
+                                          ? p.surface
+                                          : p.accent.withValues(alpha: 0.18),
+                                      shape: StadiumBorder(
+                                        side: BorderSide(
+                                          color: muteReminders
+                                              ? p.hairline
+                                              : p.accent.withValues(alpha: 0.6),
+                                        ),
+                                      ),
+                                      child: InkWell(
+                                        customBorder: const StadiumBorder(),
+                                        onTap: () => setSheet(
+                                          () => muteReminders = !muteReminders,
+                                        ),
                                         child: Padding(
                                           padding: const EdgeInsets.symmetric(
-                                            horizontal: 14,
-                                            vertical: 10,
+                                            horizontal: 18,
+                                            vertical: 12,
                                           ),
                                           child: Row(
+                                            mainAxisSize: MainAxisSize.min,
                                             children: [
                                               Icon(
-                                                Icons.repeat_rounded,
+                                                muteReminders
+                                                    ? Icons
+                                                          .notifications_off_outlined
+                                                    : Icons
+                                                          .notifications_active_outlined,
                                                 size: 20,
-                                                color: p.muted,
+                                                color: muteReminders
+                                                    ? p.muted
+                                                    : p.accent,
                                               ),
-                                              const SizedBox(width: 12),
-                                              Expanded(
-                                                child: Text(
-                                                  _draftRecurrenceSummary(
-                                                    recurrence: recurrence,
-                                                    weekdayMask:
-                                                        recurrenceWeekdayMask,
-                                                    monthDay:
-                                                        recurrenceMonthDay,
-                                                  ),
-                                                  style: Theme.of(context)
-                                                      .textTheme
-                                                      .bodyLarge
-                                                      ?.copyWith(
-                                                        fontWeight:
-                                                            FontWeight.w600,
-                                                        color: p.text,
-                                                      ),
+                                              const SizedBox(width: 10),
+                                              Text(
+                                                muteReminders
+                                                    ? 'Hinweise aus'
+                                                    : 'Hinweise an',
+                                                style: TextStyle(
+                                                  color: p.text,
+                                                  fontWeight: FontWeight.w600,
                                                 ),
-                                              ),
-                                              Icon(
-                                                Icons.chevron_right_rounded,
-                                                color: p.muted,
                                               ),
                                             ],
                                           ),
                                         ),
                                       ),
-                                    ],
+                                    ),
                                   ),
-                                ),
+                                ],
                                 const SizedBox(height: 14),
                                 Container(
                                   decoration: BoxDecoration(
@@ -10836,257 +11116,70 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                                         ),
                                       ),
                                       subtitle: Text(
-                                        'Erinnerungen · Randfarbe',
+                                        'Ganztags · Zeit als Dauer eingeben',
                                         style: TextStyle(
                                           color: p.muted,
                                           fontSize: 12.5,
                                         ),
                                       ),
                                       children: [
-                                      if (!allDay)
-                                        SwitchListTile(
-                                          contentPadding: EdgeInsets.zero,
-                                          title: Text(
-                                            'Erinnerungen',
-                                            style: TextStyle(color: p.text),
-                                          ),
-                                          subtitle: Text(
-                                            muteReminders
-                                                ? 'Für diesen Block aus'
-                                                : 'Wie unter „Erinnerungen & Wecker“ eingestellt',
-                                            style: Theme.of(context)
-                                                .textTheme
-                                                .bodySmall
-                                                ?.copyWith(color: p.muted),
-                                          ),
-                                          value: !muteReminders,
-                                          onChanged: (v) => setSheet(
-                                            () => muteReminders = !v,
-                                          ),
+                                      SwitchListTile(
+                                        contentPadding: EdgeInsets.zero,
+                                        title: Text(
+                                          'Ganztags',
+                                          style: TextStyle(color: p.text),
                                         ),
-                                      const SizedBox(height: 12),
-                                      Text(
-                                        'Randfarbe',
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .labelLarge
-                                            ?.copyWith(
-                                              fontWeight: FontWeight.w700,
-                                              color: p.muted,
-                                            ),
+                                        value: allDay,
+                                        onChanged: (v) => setSheet(() {
+                                          allDay = v;
+                                          if (v) {
+                                            draftStart = 0;
+                                            draftEnd = 1440;
+                                          }
+                                        }),
                                       ),
-                                      const SizedBox(height: 6),
-                                      Row(
-                                        children: [
-                                          Expanded(
-                                            child: Text(
-                                              useCategoryStripe
-                                                  ? 'Wie Kategorie'
-                                                  : 'Eigene Akzentfarbe',
-                                              style: Theme.of(context)
-                                                  .textTheme
-                                                  .bodySmall
-                                                  ?.copyWith(
-                                                    color: p.text.withValues(
-                                                      alpha: 0.92,
-                                                    ),
-                                                  ),
-                                            ),
-                                          ),
-                                          Switch.adaptive(
-                                            value: useCategoryStripe,
-                                            onChanged: (v) {
-                                              setSheet(() {
-                                                useCategoryStripe = v;
-                                                if (v) {
-                                                  draftCustomStripeHex = null;
-                                                } else {
-                                                  draftCustomStripeHex ??=
-                                                      _colorToHexArgb(
-                                                        _stripeColor(
-                                                          colorLabel,
-                                                        ),
-                                                      );
-                                                }
-                                              });
-                                            },
-                                          ),
-                                        ],
-                                      ),
-                                      if (!useCategoryStripe) ...[
-                                        const SizedBox(height: 8),
-                                        Align(
-                                          alignment: Alignment.centerRight,
-                                          child: IconButton(
-                                            tooltip:
-                                                'Randfarbe frei wählen — Farbplatte & Regenbogen',
-                                            visualDensity:
-                                                VisualDensity.compact,
-                                            onPressed: () async {
-                                              final start =
-                                                  draftCustomStripeHex != null
-                                                  ? _colorFromHexString(
-                                                      draftCustomStripeHex!,
-                                                    )
-                                                  : _stripeColor(colorLabel);
-                                              final picked =
-                                                  await _pickStripeColorFromFullPalette(
-                                                    start,
-                                                  );
-                                              if (picked == null || !mounted)
-                                                return;
-                                              final pickedHex = _colorToHexArgb(
-                                                picked,
-                                              );
-                                              setSheet(() {
-                                                draftCustomStripeHex =
-                                                    pickedHex;
-                                              });
-                                              final exists =
-                                                  _customStripeSwatches.any(
-                                                    (x) =>
-                                                        x.toARGB32() ==
-                                                        picked.toARGB32(),
-                                                  );
-                                              if (!exists &&
-                                                  !_isBuiltinStripeSwatch(
-                                                    picked,
-                                                  )) {
-                                                setState(() {
-                                                  _customStripeSwatches.add(
-                                                    picked,
-                                                  );
-                                                });
-                                                await _saveCustomStripeSwatches();
-                                              }
-                                            },
-                                            icon: Icon(
-                                              Icons.add_circle_outline,
-                                              color: p.accent,
-                                            ),
-                                          ),
-                                        ),
-                                        Wrap(
-                                          spacing: 8,
-                                          runSpacing: 8,
-                                          children: [
-                                            for (final c
-                                                in _allStripeSwatches())
-                                              Builder(
-                                                builder: (_) {
-                                                  final isCustom =
-                                                      !_isBuiltinStripeSwatch(
-                                                        c,
-                                                      );
-                                                  final isActive =
-                                                      draftCustomStripeHex ==
-                                                      _colorToHexArgb(c);
-                                                  return GestureDetector(
-                                                    onTap: () => setSheet(
-                                                      () =>
-                                                          draftCustomStripeHex =
-                                                              _colorToHexArgb(
-                                                                c,
-                                                              ),
-                                                    ),
-                                                    child: Stack(
-                                                      clipBehavior: Clip.none,
-                                                      children: [
-                                                        Container(
-                                                          width: 32,
-                                                          height: 32,
-                                                          decoration: BoxDecoration(
-                                                            color: c,
-                                                            shape:
-                                                                BoxShape.circle,
-                                                            border: Border.all(
-                                                              color: isActive
-                                                                  ? p.accent
-                                                                  : p.hairline
-                                                                        .withValues(
-                                                                          alpha:
-                                                                              0.55,
-                                                                        ),
-                                                              width: isActive
-                                                                  ? 2.6
-                                                                  : 1,
-                                                            ),
-                                                          ),
-                                                        ),
-                                                        if (isCustom)
-                                                          Positioned(
-                                                            right: -4,
-                                                            top: -4,
-                                                            child: GestureDetector(
-                                                              onTap: () async {
-                                                                setState(() {
-                                                                  _customStripeSwatches
-                                                                      .removeWhere(
-                                                                        (x) =>
-                                                                            x.toARGB32() ==
-                                                                            c.toARGB32(),
-                                                                      );
-                                                                });
-                                                                if (draftCustomStripeHex ==
-                                                                    _colorToHexArgb(
-                                                                      c,
-                                                                    )) {
-                                                                  setSheet(() {
-                                                                    draftCustomStripeHex =
-                                                                        _colorToHexArgb(
-                                                                          _stripeColor(
-                                                                            colorLabel,
-                                                                          ),
-                                                                        );
-                                                                  });
-                                                                }
-                                                                await _saveCustomStripeSwatches();
-                                                              },
-                                                              child: Container(
-                                                                width: 16,
-                                                                height: 16,
-                                                                decoration: BoxDecoration(
-                                                                  color:
-                                                                      p.surface,
-                                                                  shape: BoxShape
-                                                                      .circle,
-                                                                  border: Border.all(
-                                                                    color: p
-                                                                        .hairline,
-                                                                  ),
-                                                                ),
-                                                                child: Icon(
-                                                                  Icons
-                                                                      .close_rounded,
-                                                                  size: 11,
-                                                                  color:
-                                                                      p.muted,
-                                                                ),
-                                                              ),
-                                                            ),
-                                                          ),
-                                                      ],
-                                                    ),
-                                                  );
-                                                },
-                                              ),
-                                          ],
-                                        ),
+                                      if (!allDay) ...[
                                         const SizedBox(height: 4),
                                         Text(
-                                          'Eigene Farben: + hinzufügen, X löschen',
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .labelSmall
-                                              ?.copyWith(
-                                                color: p.muted.withValues(
-                                                  alpha: 0.9,
-                                                ),
-                                              ),
+                                          'Zeit eingeben als',
+                                          style: TextStyle(
+                                            color: p.muted,
+                                            fontSize: 12.5,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 6),
+                                        Wrap(
+                                          spacing: 8,
+                                          children: [
+                                            ChoiceChip(
+                                              label: const Text('Start/Ende'),
+                                              selected: !useDurationInput,
+                                              onSelected: (v) {
+                                                if (!v) return;
+                                                setSheet(
+                                                  () => useDurationInput = false,
+                                                );
+                                              },
+                                            ),
+                                            ChoiceChip(
+                                              label: const Text('Dauer'),
+                                              selected: useDurationInput,
+                                              onSelected: (v) {
+                                                if (!v) return;
+                                                setSheet(() {
+                                                  useDurationInput = true;
+                                                  syncDurationFromRange();
+                                                });
+                                              },
+                                            ),
+                                          ],
                                         ),
                                       ],
                                       ],
                                     ),
+                                  ),
+                                ),
+                                    ],
                                   ),
                                 ),
                               ],
