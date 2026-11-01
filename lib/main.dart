@@ -9586,7 +9586,8 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                   borderRadius: const BorderRadius.vertical(
                     top: Radius.circular(26),
                   ),
-                  child: SizedBox(
+                  child: Container(
+                    color: p.bg,
                     height: maxH,
                     child: Column(
                       children: [
@@ -9781,6 +9782,25 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                                                       }),
                                                     ),
                                                   ),
+                                                if (editing != null)
+                                                  Padding(
+                                                    padding:
+                                                        const EdgeInsets.only(
+                                                          top: 6,
+                                                        ),
+                                                    child: FilterChip(
+                                                      label: Text(
+                                                        completed
+                                                            ? 'Erledigt'
+                                                            : 'Als erledigt markieren',
+                                                      ),
+                                                      selected: completed,
+                                                      onSelected: (v) =>
+                                                          setSheet(
+                                                            () => completed = v,
+                                                          ),
+                                                    ),
+                                                  ),
                                                 const SizedBox(height: 4),
                                               ],
                                             ),
@@ -9868,89 +9888,13 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                                                   ),
                                                 ],
                                               ),
-                                              const SizedBox(height: 8),
-                                              GestureDetector(
-                                                onTap: () => setSheet(
-                                                  () => completed = !completed,
-                                                ),
-                                                child: Container(
-                                                  width: 34,
-                                                  height: 34,
-                                                  decoration: BoxDecoration(
-                                                    shape: BoxShape.circle,
-                                                    border: Border.all(
-                                                      color: completed
-                                                          ? p.text.withValues(
-                                                              alpha: 0.55,
-                                                            )
-                                                          : p.muted.withValues(
-                                                              alpha: 0.85,
-                                                            ),
-                                                      width: completed
-                                                          ? 2.2
-                                                          : 1.8,
-                                                    ),
-                                                    color: completed
-                                                        ? p.text.withValues(
-                                                            alpha: 0.12,
-                                                          )
-                                                        : null,
-                                                  ),
-                                                  child: completed
-                                                      ? Icon(
-                                                          Icons.check_rounded,
-                                                          size: 18,
-                                                          color: p.text,
-                                                        )
-                                                      : null,
-                                                ),
-                                              ),
                                             ],
                                           ),
                                         ],
                                       ),
                                       const SizedBox(height: 12),
-                                      DropdownButtonFormField<String>(
-                                        key: ValueKey<String>(
-                                          'cat_$colorLabel',
-                                        ),
-                                        initialValue: colorLabel,
-                                        dropdownColor: p.surface,
-                                        decoration: InputDecoration(
-                                          labelText: 'Kategorie',
-                                          filled: true,
-                                          fillColor: p.bg.withValues(
-                                            alpha: 0.35,
-                                          ),
-                                          border: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(
-                                              14,
-                                            ),
-                                            borderSide: BorderSide(
-                                              color: p.hairline,
-                                            ),
-                                          ),
-                                        ),
-                                        items: _categoryOrder
-                                            .where(
-                                              (k) => _categoryColors
-                                                  .containsKey(k),
-                                            )
-                                            .map(
-                                              (k) => DropdownMenuItem(
-                                                value: k,
-                                                child: Text(k),
-                                              ),
-                                            )
-                                            .toList(),
-                                        onChanged: (v) {
-                                          if (v == null) return;
-                                          setSheet(() => colorLabel = v);
-                                        },
-                                      ),
-                                      const SizedBox(height: 12),
                                       Text(
-                                        'Randfarbe',
+                                        'Kategorie',
                                         style: Theme.of(context)
                                             .textTheme
                                             .labelLarge
@@ -9959,216 +9903,41 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                                               color: p.muted,
                                             ),
                                       ),
-                                      const SizedBox(height: 6),
-                                      Row(
+                                      const SizedBox(height: 8),
+                                      Wrap(
+                                        spacing: 8,
+                                        runSpacing: 8,
                                         children: [
-                                          Expanded(
-                                            child: Text(
-                                              useCategoryStripe
-                                                  ? 'Wie Kategorie'
-                                                  : 'Eigene Akzentfarbe',
-                                              style: Theme.of(context)
-                                                  .textTheme
-                                                  .bodySmall
-                                                  ?.copyWith(
-                                                    color: p.text.withValues(
-                                                      alpha: 0.92,
-                                                    ),
-                                                  ),
-                                            ),
-                                          ),
-                                          Switch.adaptive(
-                                            value: useCategoryStripe,
-                                            onChanged: (v) {
-                                              setSheet(() {
-                                                useCategoryStripe = v;
-                                                if (v) {
-                                                  draftCustomStripeHex = null;
-                                                } else {
-                                                  draftCustomStripeHex ??=
-                                                      _colorToHexArgb(
-                                                        _stripeColor(
-                                                          colorLabel,
-                                                        ),
-                                                      );
-                                                }
-                                              });
-                                            },
-                                          ),
-                                        ],
-                                      ),
-                                      if (!useCategoryStripe) ...[
-                                        const SizedBox(height: 8),
-                                        Align(
-                                          alignment: Alignment.centerRight,
-                                          child: IconButton(
-                                            tooltip:
-                                                'Randfarbe frei wählen — Farbplatte & Regenbogen',
-                                            visualDensity:
-                                                VisualDensity.compact,
-                                            onPressed: () async {
-                                              final start =
-                                                  draftCustomStripeHex != null
-                                                  ? _colorFromHexString(
-                                                      draftCustomStripeHex!,
-                                                    )
-                                                  : _stripeColor(colorLabel);
-                                              final picked =
-                                                  await _pickStripeColorFromFullPalette(
-                                                    start,
-                                                  );
-                                              if (picked == null || !mounted)
-                                                return;
-                                              final pickedHex = _colorToHexArgb(
-                                                picked,
-                                              );
-                                              setSheet(() {
-                                                draftCustomStripeHex =
-                                                    pickedHex;
-                                              });
-                                              final exists =
-                                                  _customStripeSwatches.any(
-                                                    (x) =>
-                                                        x.toARGB32() ==
-                                                        picked.toARGB32(),
-                                                  );
-                                              if (!exists &&
-                                                  !_isBuiltinStripeSwatch(
-                                                    picked,
-                                                  )) {
-                                                setState(() {
-                                                  _customStripeSwatches.add(
-                                                    picked,
-                                                  );
-                                                });
-                                                await _saveCustomStripeSwatches();
-                                              }
-                                            },
-                                            icon: Icon(
-                                              Icons.add_circle_outline,
-                                              color: p.accent,
-                                            ),
-                                          ),
-                                        ),
-                                        Wrap(
-                                          spacing: 8,
-                                          runSpacing: 8,
-                                          children: [
-                                            for (final c
-                                                in _allStripeSwatches())
-                                              Builder(
-                                                builder: (_) {
-                                                  final isCustom =
-                                                      !_isBuiltinStripeSwatch(
-                                                        c,
-                                                      );
-                                                  final isActive =
-                                                      draftCustomStripeHex ==
-                                                      _colorToHexArgb(c);
-                                                  return GestureDetector(
-                                                    onTap: () => setSheet(
-                                                      () =>
-                                                          draftCustomStripeHex =
-                                                              _colorToHexArgb(
-                                                                c,
-                                                              ),
-                                                    ),
-                                                    child: Stack(
-                                                      clipBehavior: Clip.none,
-                                                      children: [
-                                                        Container(
-                                                          width: 32,
-                                                          height: 32,
-                                                          decoration: BoxDecoration(
-                                                            color: c,
-                                                            shape:
-                                                                BoxShape.circle,
-                                                            border: Border.all(
-                                                              color: isActive
-                                                                  ? p.accent
-                                                                  : p.hairline
-                                                                        .withValues(
-                                                                          alpha:
-                                                                              0.55,
-                                                                        ),
-                                                              width: isActive
-                                                                  ? 2.6
-                                                                  : 1,
-                                                            ),
-                                                          ),
-                                                        ),
-                                                        if (isCustom)
-                                                          Positioned(
-                                                            right: -4,
-                                                            top: -4,
-                                                            child: GestureDetector(
-                                                              onTap: () async {
-                                                                setState(() {
-                                                                  _customStripeSwatches
-                                                                      .removeWhere(
-                                                                        (x) =>
-                                                                            x.toARGB32() ==
-                                                                            c.toARGB32(),
-                                                                      );
-                                                                });
-                                                                if (draftCustomStripeHex ==
-                                                                    _colorToHexArgb(
-                                                                      c,
-                                                                    )) {
-                                                                  setSheet(() {
-                                                                    draftCustomStripeHex =
-                                                                        _colorToHexArgb(
-                                                                          _stripeColor(
-                                                                            colorLabel,
-                                                                          ),
-                                                                        );
-                                                                  });
-                                                                }
-                                                                await _saveCustomStripeSwatches();
-                                                              },
-                                                              child: Container(
-                                                                width: 16,
-                                                                height: 16,
-                                                                decoration: BoxDecoration(
-                                                                  color:
-                                                                      p.surface,
-                                                                  shape: BoxShape
-                                                                      .circle,
-                                                                  border: Border.all(
-                                                                    color: p
-                                                                        .hairline,
-                                                                  ),
-                                                                ),
-                                                                child: Icon(
-                                                                  Icons
-                                                                      .close_rounded,
-                                                                  size: 11,
-                                                                  color:
-                                                                      p.muted,
-                                                                ),
-                                                              ),
-                                                            ),
-                                                          ),
-                                                      ],
-                                                    ),
-                                                  );
-                                                },
-                                              ),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          'Eigene Farben: + hinzufügen, X löschen',
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .labelSmall
-                                              ?.copyWith(
-                                                color: p.muted.withValues(
-                                                  alpha: 0.9,
+                                          for (final k in _categoryOrder.where(
+                                            (k) => _categoryColors.containsKey(k),
+                                          ))
+                                            ChoiceChip(
+                                              showCheckmark: false,
+                                              avatar: Container(
+                                                width: 10,
+                                                height: 10,
+                                                decoration: BoxDecoration(
+                                                  color: _categoryColors[k],
+                                                  shape: BoxShape.circle,
                                                 ),
                                               ),
-                                        ),
-                                      ],
+                                              label: Text(k),
+                                              selected: colorLabel == k,
+                                              selectedColor:
+                                                  (_categoryColors[k] ?? p.accent)
+                                                      .withValues(alpha: 0.25),
+                                              side: BorderSide(
+                                                color: colorLabel == k
+                                                    ? (_categoryColors[k] ??
+                                                          p.accent)
+                                                    : p.hairline,
+                                              ),
+                                              onSelected: (_) => setSheet(
+                                                () => colorLabel = k,
+                                              ),
+                                            ),
+                                        ],
+                                      ),
                                     ],
                                   ),
                                 ),
@@ -10262,31 +10031,6 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                                         ),
                                       ),
                                       dividerRow(),
-                                      if (!allDay)
-                                        SwitchListTile(
-                                          contentPadding:
-                                              const EdgeInsets.symmetric(
-                                            horizontal: 14,
-                                          ),
-                                          title: Text(
-                                            'Erinnerungen',
-                                            style: TextStyle(color: p.text),
-                                          ),
-                                          subtitle: Text(
-                                            muteReminders
-                                                ? 'Für diesen Block aus — global bleiben die Einstellungen erhalten.'
-                                                : 'Greifen die Erinnerungen oben („Glocke“) auch für diesen Block.',
-                                            style: Theme.of(context)
-                                                .textTheme
-                                                .bodySmall
-                                                ?.copyWith(color: p.muted),
-                                          ),
-                                          value: !muteReminders,
-                                          onChanged: (v) => setSheet(
-                                            () => muteReminders = !v,
-                                          ),
-                                        ),
-                                      if (!allDay) dividerRow(),
                                       InkWell(
                                         onTap: allDay
                                             ? null
@@ -10787,7 +10531,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                                           dividerRow(),
                                           const SizedBox(height: 12),
                                           Text(
-                                            'Fokus & Pausen (in der Session)',
+                                            'Fokus & Pausen',
                                             style: Theme.of(context)
                                                 .textTheme
                                                 .titleSmall
@@ -10798,8 +10542,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                                           ),
                                           const SizedBox(height: 6),
                                           Text(
-                                            'Plane Abschnitte innerhalb der Blockdauer ($previewDur Min). '
-                                            'Pausen 5–30 Min; beim laufenden Block erscheint eine Stoppuhr bzw. ein Countdown.',
+                                            'Optional: Block in Fokus- und Pausenabschnitte teilen, mit Timer.',
                                             style: Theme.of(context)
                                                 .textTheme
                                                 .bodySmall
@@ -11059,11 +10802,304 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                                     ),
                                   ),
                                 ),
+                                const SizedBox(height: 14),
+                                Container(
+                                  decoration: BoxDecoration(
+                                    color: p.surface,
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(color: p.hairline),
+                                  ),
+                                  child: Theme(
+                                    data: Theme.of(context).copyWith(
+                                      dividerColor: Colors.transparent,
+                                    ),
+                                    child: ExpansionTile(
+                                      tilePadding: const EdgeInsets.symmetric(
+                                        horizontal: 14,
+                                      ),
+                                      childrenPadding:
+                                          const EdgeInsets.fromLTRB(
+                                            14,
+                                            0,
+                                            14,
+                                            14,
+                                          ),
+                                      expandedCrossAxisAlignment:
+                                          CrossAxisAlignment.stretch,
+                                      iconColor: p.muted,
+                                      collapsedIconColor: p.muted,
+                                      title: Text(
+                                        'Weitere Optionen',
+                                        style: TextStyle(
+                                          color: p.text,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                      subtitle: Text(
+                                        'Erinnerungen · Randfarbe',
+                                        style: TextStyle(
+                                          color: p.muted,
+                                          fontSize: 12.5,
+                                        ),
+                                      ),
+                                      children: [
+                                      if (!allDay)
+                                        SwitchListTile(
+                                          contentPadding: EdgeInsets.zero,
+                                          title: Text(
+                                            'Erinnerungen',
+                                            style: TextStyle(color: p.text),
+                                          ),
+                                          subtitle: Text(
+                                            muteReminders
+                                                ? 'Für diesen Block aus'
+                                                : 'Wie unter „Erinnerungen & Wecker“ eingestellt',
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .bodySmall
+                                                ?.copyWith(color: p.muted),
+                                          ),
+                                          value: !muteReminders,
+                                          onChanged: (v) => setSheet(
+                                            () => muteReminders = !v,
+                                          ),
+                                        ),
+                                      const SizedBox(height: 12),
+                                      Text(
+                                        'Randfarbe',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .labelLarge
+                                            ?.copyWith(
+                                              fontWeight: FontWeight.w700,
+                                              color: p.muted,
+                                            ),
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: Text(
+                                              useCategoryStripe
+                                                  ? 'Wie Kategorie'
+                                                  : 'Eigene Akzentfarbe',
+                                              style: Theme.of(context)
+                                                  .textTheme
+                                                  .bodySmall
+                                                  ?.copyWith(
+                                                    color: p.text.withValues(
+                                                      alpha: 0.92,
+                                                    ),
+                                                  ),
+                                            ),
+                                          ),
+                                          Switch.adaptive(
+                                            value: useCategoryStripe,
+                                            onChanged: (v) {
+                                              setSheet(() {
+                                                useCategoryStripe = v;
+                                                if (v) {
+                                                  draftCustomStripeHex = null;
+                                                } else {
+                                                  draftCustomStripeHex ??=
+                                                      _colorToHexArgb(
+                                                        _stripeColor(
+                                                          colorLabel,
+                                                        ),
+                                                      );
+                                                }
+                                              });
+                                            },
+                                          ),
+                                        ],
+                                      ),
+                                      if (!useCategoryStripe) ...[
+                                        const SizedBox(height: 8),
+                                        Align(
+                                          alignment: Alignment.centerRight,
+                                          child: IconButton(
+                                            tooltip:
+                                                'Randfarbe frei wählen — Farbplatte & Regenbogen',
+                                            visualDensity:
+                                                VisualDensity.compact,
+                                            onPressed: () async {
+                                              final start =
+                                                  draftCustomStripeHex != null
+                                                  ? _colorFromHexString(
+                                                      draftCustomStripeHex!,
+                                                    )
+                                                  : _stripeColor(colorLabel);
+                                              final picked =
+                                                  await _pickStripeColorFromFullPalette(
+                                                    start,
+                                                  );
+                                              if (picked == null || !mounted)
+                                                return;
+                                              final pickedHex = _colorToHexArgb(
+                                                picked,
+                                              );
+                                              setSheet(() {
+                                                draftCustomStripeHex =
+                                                    pickedHex;
+                                              });
+                                              final exists =
+                                                  _customStripeSwatches.any(
+                                                    (x) =>
+                                                        x.toARGB32() ==
+                                                        picked.toARGB32(),
+                                                  );
+                                              if (!exists &&
+                                                  !_isBuiltinStripeSwatch(
+                                                    picked,
+                                                  )) {
+                                                setState(() {
+                                                  _customStripeSwatches.add(
+                                                    picked,
+                                                  );
+                                                });
+                                                await _saveCustomStripeSwatches();
+                                              }
+                                            },
+                                            icon: Icon(
+                                              Icons.add_circle_outline,
+                                              color: p.accent,
+                                            ),
+                                          ),
+                                        ),
+                                        Wrap(
+                                          spacing: 8,
+                                          runSpacing: 8,
+                                          children: [
+                                            for (final c
+                                                in _allStripeSwatches())
+                                              Builder(
+                                                builder: (_) {
+                                                  final isCustom =
+                                                      !_isBuiltinStripeSwatch(
+                                                        c,
+                                                      );
+                                                  final isActive =
+                                                      draftCustomStripeHex ==
+                                                      _colorToHexArgb(c);
+                                                  return GestureDetector(
+                                                    onTap: () => setSheet(
+                                                      () =>
+                                                          draftCustomStripeHex =
+                                                              _colorToHexArgb(
+                                                                c,
+                                                              ),
+                                                    ),
+                                                    child: Stack(
+                                                      clipBehavior: Clip.none,
+                                                      children: [
+                                                        Container(
+                                                          width: 32,
+                                                          height: 32,
+                                                          decoration: BoxDecoration(
+                                                            color: c,
+                                                            shape:
+                                                                BoxShape.circle,
+                                                            border: Border.all(
+                                                              color: isActive
+                                                                  ? p.accent
+                                                                  : p.hairline
+                                                                        .withValues(
+                                                                          alpha:
+                                                                              0.55,
+                                                                        ),
+                                                              width: isActive
+                                                                  ? 2.6
+                                                                  : 1,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                        if (isCustom)
+                                                          Positioned(
+                                                            right: -4,
+                                                            top: -4,
+                                                            child: GestureDetector(
+                                                              onTap: () async {
+                                                                setState(() {
+                                                                  _customStripeSwatches
+                                                                      .removeWhere(
+                                                                        (x) =>
+                                                                            x.toARGB32() ==
+                                                                            c.toARGB32(),
+                                                                      );
+                                                                });
+                                                                if (draftCustomStripeHex ==
+                                                                    _colorToHexArgb(
+                                                                      c,
+                                                                    )) {
+                                                                  setSheet(() {
+                                                                    draftCustomStripeHex =
+                                                                        _colorToHexArgb(
+                                                                          _stripeColor(
+                                                                            colorLabel,
+                                                                          ),
+                                                                        );
+                                                                  });
+                                                                }
+                                                                await _saveCustomStripeSwatches();
+                                                              },
+                                                              child: Container(
+                                                                width: 16,
+                                                                height: 16,
+                                                                decoration: BoxDecoration(
+                                                                  color:
+                                                                      p.surface,
+                                                                  shape: BoxShape
+                                                                      .circle,
+                                                                  border: Border.all(
+                                                                    color: p
+                                                                        .hairline,
+                                                                  ),
+                                                                ),
+                                                                child: Icon(
+                                                                  Icons
+                                                                      .close_rounded,
+                                                                  size: 11,
+                                                                  color:
+                                                                      p.muted,
+                                                                ),
+                                                              ),
+                                                            ),
+                                                          ),
+                                                      ],
+                                                    ),
+                                                  );
+                                                },
+                                              ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          'Eigene Farben: + hinzufügen, X löschen',
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .labelSmall
+                                              ?.copyWith(
+                                                color: p.muted.withValues(
+                                                  alpha: 0.9,
+                                                ),
+                                              ),
+                                        ),
+                                      ],
+                                      ],
+                                    ),
+                                  ),
+                                ),
                               ],
                             ),
                           ),
                         ),
-                        Padding(
+                        Container(
+                          decoration: BoxDecoration(
+                            color: p.bg,
+                            border: Border(
+                              top: BorderSide(color: p.hairline),
+                            ),
+                          ),
                           padding: EdgeInsets.fromLTRB(
                             14,
                             10,
