@@ -2972,7 +2972,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
     final items = <({IconData icon, String label, String? sub, VoidCallback onTap})>[
       (
         icon: Icons.autorenew_rounded,
-        label: 'Projekt-Rotation',
+        label: 'Projekt Circle',
         sub: _projectRotation.upcoming()?.title == null
             ? 'Projekte festlegen'
             : 'Als Nächstes: ${_projectRotation.upcoming()!.title}',
@@ -3420,7 +3420,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
     final isProject = _isProjectSessionBlock(block);
     final projectName = isProject ? _projectSessionLabel(block) : null;
     final shownTitle = projectName ?? block.title;
-    final shownTime = isProject ? 'Projekt-Session · $timeLabel' : timeLabel;
+    final shownTime = isProject ? 'Projekt Circle · $timeLabel' : timeLabel;
 
     Widget check() => GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -3608,7 +3608,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
     final done = block.completed && name != null;
     final accent = ink ?? p.accent;
     final label = name == null
-        ? (_projectRotation.isEmpty ? 'Projekte festlegen' : 'Projekt-Session')
+        ? (_projectRotation.isEmpty ? 'Projekte festlegen' : 'Projekt Circle')
         : (done ? name : 'Als Nächstes · $name');
     return Align(
       alignment: Alignment.centerLeft,
@@ -3681,6 +3681,19 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
 
   String? _projectSessionLabel(TimeBlock b) => _projectSessionProject(b)?.title;
 
+  /// Projekte in Circle-Reihenfolge, beginnend bei [from] (oder beim nächsten).
+  List<RotationProject> _circleOrderFrom(RotationProject? from) {
+    final items = _projectRotation.items;
+    if (items.isEmpty) return const [];
+    var i = from == null ? -1 : items.indexWhere((x) => x.id == from.id);
+    if (i < 0) {
+      final n = _projectRotation.upcoming();
+      i = n == null ? 0 : items.indexWhere((x) => x.id == n.id);
+      if (i < 0) i = 0;
+    }
+    return [for (var k = 0; k < items.length; k++) items[(i + k) % items.length]];
+  }
+
   static const List<String> _kWeekdayShort = [
     'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So',
   ];
@@ -3726,7 +3739,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
         : _fallbackCategoryLabel();
     _recordUndoSnapshot();
     final block = _newBlock(
-      'Projekt-Session',
+      'Projekt Circle',
       s,
       e,
       label,
@@ -3749,7 +3762,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
       SnackBar(
         duration: Duration(seconds: pushed ? 6 : 4),
         content: Text(
-          'Projekt-Session ${_fmtMin(block.startMin)}–${_fmtMin(block.endMin % 1440)} hinzugefügt'
+          'Projekt Circle ${_fmtMin(block.startMin)}–${_fmtMin(block.endMin % 1440)} hinzugefügt'
           '${next != null ? ' · $next' : ''}'
           '${pushed ? '\nKein freier Platz – folgende Blöcke 1 h nach hinten verschoben.' : ''}',
         ),
@@ -3934,11 +3947,18 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                   '${pr == null ? '' : ' · Zuletzt: ${lastDoneLabel(last)}'}',
                   style: TextStyle(color: p.muted),
                 ),
+                if (pr != null && _projectRotation.items.length > 1) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    'Danach: ${_circleOrderFrom(pr).skip(1).map((e) => e.title).join(' → ')}',
+                    style: TextStyle(color: p.muted, fontSize: 13),
+                  ),
+                ],
                 const SizedBox(height: 16),
                 if (pr == null) ...[
                   Text(
                     'Lege zuerst deine Projekte an (z. B. Programmieren, Klavier, Portugiesisch). '
-                    'Danach zeigt jede Projekt-Session automatisch das nächste.',
+                    'Danach zeigt jeder Projekt Circle automatisch das nächste.',
                     style: TextStyle(color: p.muted, height: 1.35),
                   ),
                   const SizedBox(height: 12),
@@ -4106,7 +4126,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        'Projekt-Rotation',
+                        'Projekt Circle',
                         style: Theme.of(context).textTheme.titleLarge
                             ?.copyWith(fontWeight: FontWeight.w800),
                       ),
@@ -4115,9 +4135,8 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'Jede Projekt-Session zeigt das nächste Projekt. Erledigt → das nächste ist dran, '
-                  'nach dem letzten geht es von vorn los. Tippen zeigt Verlauf & Notizen, '
-                  'ziehen ändert die Reihenfolge.',
+                  'Deine Projekte im Kreis: jede Session nimmt automatisch das nächste. '
+                  'Tippen zeigt Verlauf & Notizen, ziehen ändert die Reihenfolge.',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: p.muted,
                     height: 1.35,
@@ -4130,7 +4149,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                     Navigator.pop(sheetCtx);
                   },
                   icon: const Icon(Icons.add_rounded),
-                  label: const Text('Projekt-Session zum Plan hinzufügen'),
+                  label: const Text('Projekt Circle zum Plan hinzufügen'),
                 ),
                 const SizedBox(height: 14),
                 if (rot.items.isEmpty)
@@ -9189,6 +9208,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
     int? draftEndMin,
   }) async {
     final titleCtrl = TextEditingController(text: editing?.title ?? '');
+    final circleAddCtrl = TextEditingController();
     final notesCtrl = TextEditingController(text: editing?.notes ?? '');
     final subtaskInputCtrl = TextEditingController();
 
@@ -9577,6 +9597,257 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
               thickness: 1,
               color: p.hairline.withValues(alpha: 0.85),
             );
+
+            final isCircle = isProjectSessionTitle(titleCtrl.text);
+
+            void setCircleType(bool on) {
+              setSheet(() {
+                if (on) {
+                  titleCtrl.text = 'Projekt Circle';
+                  if (_categoryColors.containsKey('Fokus')) {
+                    colorLabel = 'Fokus';
+                  }
+                  draftCustomIconCode = Icons.autorenew_rounded.codePoint;
+                } else {
+                  if (isProjectSessionTitle(titleCtrl.text)) {
+                    titleCtrl.text = '';
+                  }
+                  if (draftCustomIconCode ==
+                      Icons.autorenew_rounded.codePoint) {
+                    draftCustomIconCode = null;
+                  }
+                }
+              });
+            }
+
+            Widget typeTabs() {
+              Widget tab(String label, IconData icon, bool sel, VoidCallback onTap) {
+                return Expanded(
+                  child: Material(
+                    color: sel ? p.accent : Colors.transparent,
+                    borderRadius: BorderRadius.circular(12),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(12),
+                      onTap: onTap,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 11),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              icon,
+                              size: 18,
+                              color: sel ? p.bg : p.muted,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              label,
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                color: sel ? p.bg : p.text,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }
+
+              return Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: p.surface,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: p.hairline),
+                ),
+                child: Row(
+                  children: [
+                    tab(
+                      'Block',
+                      Icons.crop_square_rounded,
+                      !isCircle,
+                      () => setCircleType(false),
+                    ),
+                    const SizedBox(width: 4),
+                    tab(
+                      'Projekt Circle',
+                      Icons.autorenew_rounded,
+                      isCircle,
+                      () => setCircleType(true),
+                    ),
+                  ],
+                ),
+              );
+            }
+
+            Widget circleSection() {
+              final rot = _projectRotation;
+              final cur = editing != null
+                  ? _projectSessionProject(editing)
+                  : rot.upcoming();
+              final order = _circleOrderFrom(cur);
+              final doneNow = editing != null && editing.completed;
+              void addProject() {
+                final t = circleAddCtrl.text.trim();
+                if (t.isEmpty) return;
+                rot.add(t);
+                circleAddCtrl.clear();
+                setSheet(() {});
+                if (mounted) setState(() {});
+                unawaited(_saveProjectRotation());
+              }
+
+              return Container(
+                padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                decoration: BoxDecoration(
+                  color: p.surface,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: p.hairline),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.autorenew_rounded, color: p.accent, size: 20),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Projekt Circle',
+                            style: TextStyle(
+                              color: p.text,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 16,
+                            ),
+                          ),
+                        ),
+                        if (order.isNotEmpty)
+                          TextButton(
+                            onPressed: () async {
+                              await _openProjectRotationSheet();
+                              setSheet(() {});
+                            },
+                            child: const Text('Bearbeiten'),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    if (order.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Text(
+                          'Füge deine Projekte hinzu (z. B. Programmieren, Klavier, Portugiesisch). '
+                          'Jede Session nimmt automatisch das nächste.',
+                          style: TextStyle(color: p.muted, height: 1.35),
+                        ),
+                      ),
+                    for (var i = 0; i < order.length; i++)
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.fromLTRB(10, 10, 12, 10),
+                        decoration: BoxDecoration(
+                          color: i == 0
+                              ? p.accent.withValues(alpha: 0.10)
+                              : p.bg.withValues(alpha: 0.35),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: i == 0
+                                ? p.accent.withValues(alpha: 0.7)
+                                : p.hairline,
+                            width: i == 0 ? 1.6 : 1,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 30,
+                              height: 30,
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: i == 0 ? p.accent : Colors.transparent,
+                                border: Border.all(
+                                  color: i == 0 ? p.accent : p.hairline,
+                                ),
+                              ),
+                              child: Text(
+                                '${i + 1}',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  color: i == 0 ? p.bg : p.accent,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    i == 0
+                                        ? (doneNow ? 'ERLEDIGT' : 'DIESES MAL')
+                                        : (i == 1 ? 'DANACH' : 'DANN'),
+                                    style: TextStyle(
+                                      fontSize: 10.5,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: 1.3,
+                                      color: i == 0 ? p.accent : p.muted,
+                                    ),
+                                  ),
+                                  Text(
+                                    order[i].title,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      color: p.text,
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 15,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Text(
+                              lastDoneLabel(rot.lastDone(order[i].id)),
+                              style: TextStyle(color: p.muted, fontSize: 12),
+                            ),
+                          ],
+                        ),
+                      ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: circleAddCtrl,
+                            textCapitalization: TextCapitalization.sentences,
+                            textInputAction: TextInputAction.done,
+                            onSubmitted: (_) => addProject(),
+                            decoration: InputDecoration(
+                              hintText: 'Projekt hinzufügen …',
+                              hintStyle: TextStyle(color: p.muted),
+                              isDense: true,
+                              filled: true,
+                              fillColor: p.bg.withValues(alpha: 0.35),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide(color: p.hairline),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton.filledTonal(
+                          onPressed: addProject,
+                          icon: const Icon(Icons.add_rounded),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              );
+            }
 
             Widget infoRow({
               required IconData icon,
@@ -10197,38 +10468,6 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                                                   ),
                                                   maxLines: 2,
                                                 ),
-                                                if (editing == null)
-                                                  Padding(
-                                                    padding:
-                                                        const EdgeInsets.only(
-                                                          top: 4,
-                                                        ),
-                                                    child: ActionChip(
-                                                      avatar: Icon(
-                                                        Icons.autorenew_rounded,
-                                                        size: 16,
-                                                        color: p.accent,
-                                                      ),
-                                                      label: const Text(
-                                                        'Projekt-Session',
-                                                      ),
-                                                      onPressed: () =>
-                                                          setSheet(() {
-                                                        titleCtrl.text =
-                                                            'Projekt-Session';
-                                                        if (_categoryColors
-                                                            .containsKey(
-                                                              'Fokus',
-                                                            )) {
-                                                          colorLabel = 'Fokus';
-                                                        }
-                                                        draftCustomIconCode =
-                                                            Icons
-                                                                .autorenew_rounded
-                                                                .codePoint;
-                                                      }),
-                                                    ),
-                                                  ),
                                                     const SizedBox(height: 6),
                                                     InkWell(
                                                       onTap: () =>
@@ -10331,6 +10570,16 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                                     crossAxisAlignment:
                                         CrossAxisAlignment.stretch,
                                     children: [
+                                      if (editing == null) ...[
+                                        typeTabs(),
+                                        const SizedBox(height: 14),
+                                      ],
+                                      if (isProjectSessionTitle(
+                                        titleCtrl.text,
+                                      )) ...[
+                                        circleSection(),
+                                        const SizedBox(height: 14),
+                                      ],
                                 Container(
                                   decoration: BoxDecoration(
                                     color: p.surface,
@@ -11269,6 +11518,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
       },
     ).whenComplete(() {
       titleCtrl.dispose();
+      circleAddCtrl.dispose();
       notesCtrl.dispose();
       subtaskInputCtrl.dispose();
       for (final c in subtaskCtrlById.values) {

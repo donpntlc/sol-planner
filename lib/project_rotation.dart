@@ -294,6 +294,9 @@ String lastDoneLabel(DateTime? day, {DateTime? now}) {
 bool isProjectSessionTitle(String title) {
   final t = title.trim().toLowerCase().replaceAll(RegExp(r'[\s_\-–]+'), ' ');
   return t == 'projekt' ||
+      t.startsWith('projekt circle') ||
+      t.startsWith('project circle') ||
+      t == 'circle' ||
       t == 'projekte' ||
       t == 'project' ||
       t == 'projects' ||
