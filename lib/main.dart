@@ -28,6 +28,9 @@ import 'package:sol/cloud/sol_planner_sync_hook.dart';
 /// Gesamtskalierung der Oberfläche (1.0 = normal, 0.88 = etwas rausgezoomt).
 const double _kAppUiScale = 0.88;
 
+/// Deckkraft vergangener Blöcke (dunkler = kleiner).
+const double _kPastBlockOpacity = 0.42;
+
 const _kColorPickerDragScale =
     0.48; // <1: gleiche Fingerbewegung → kleinere Farbänderung (feinere Bedienung).
 const _kHuePickerDragScale = 0.52;
@@ -3397,9 +3400,8 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
     final mealVis = _useMealVisualFor(block);
     final live = _isWallClockActiveBlock(block);
     final done = block.completed;
-    final gridFillFrac = live
-        ? _slotElapsedFractionWhileLive(block)
-        : (_isBlockPast(block) ? 1.0 : null);
+    final gridFillFrac = live ? _slotElapsedFractionWhileLive(block) : null;
+    final pastDim = !live && _isBlockPast(block);
     final rawH = (e - s) * ppm;
     final h = max(rawH - 3, 20.0);
     final compact = h < 44;
@@ -3466,7 +3468,9 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
       left: left + 1,
       width: width - 2,
       height: h,
-      child: Material(
+      child: Opacity(
+        opacity: pastDim ? _kPastBlockOpacity : 1.0,
+        child: Material(
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(12),
@@ -3568,6 +3572,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
             ),
           ),
         ),
+      ),
       ),
     );
   }
@@ -7275,7 +7280,33 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
     );
   }
 
+  /// Vergangene Blöcke abgedunkelt (abhaken geht weiterhin).
   Widget _blockCard(
+    BuildContext context,
+    TimeBlock block,
+    bool selected,
+    bool flexSpotlight, {
+    int? flexListIndex,
+    int? flexDragAnchorIndex,
+    VoidCallback? onFlexDragHandlePointerDown,
+    bool suppressFlexDragHandle = false,
+  }) {
+    final card = _blockCardInner(
+      context,
+      block,
+      selected,
+      flexSpotlight,
+      flexListIndex: flexListIndex,
+      flexDragAnchorIndex: flexDragAnchorIndex,
+      onFlexDragHandlePointerDown: onFlexDragHandlePointerDown,
+      suppressFlexDragHandle: suppressFlexDragHandle,
+    );
+    final past = !_isWallClockActiveBlock(block) && _isBlockPast(block);
+    if (!past || selected || flexSpotlight) return card;
+    return Opacity(opacity: _kPastBlockOpacity, child: card);
+  }
+
+  Widget _blockCardInner(
     BuildContext context,
     TimeBlock block,
     bool selected,
@@ -7320,11 +7351,10 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
         : const <DeepWorkTodoItem>[];
     final deepTodoCount = deepTodos.length;
     // Vergangene Blöcke sind komplett gefüllt, der laufende anteilig; Schein nur beim laufenden.
-    final pastFilled = !isLiveNow && _isBlockPast(block);
     final liveFillFrac = isLiveNow
         ? _slotElapsedFractionWhileLive(block)
-        : (pastFilled ? 1.0 : null);
-    final activeLiveForeground = (isLiveNow || pastFilled) && !mealVis;
+        : null;
+    final activeLiveForeground = isLiveNow && !mealVis;
     // Zeitspalte + Icon-Leiste liegen außerhalb der Füllung: nur der laufende Block wird hervorgehoben.
     final railLive = isLiveNow && !mealVis;
     final liveLightUi = activeLiveForeground && !p.isDark;
