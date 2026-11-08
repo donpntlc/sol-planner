@@ -3400,8 +3400,10 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
     final mealVis = _useMealVisualFor(block);
     final live = _isWallClockActiveBlock(block);
     final done = block.completed;
-    final gridFillFrac = live ? _slotElapsedFractionWhileLive(block) : null;
     final pastDim = !live && _isBlockPast(block);
+    final gridFillFrac = live
+        ? _slotElapsedFractionWhileLive(block)
+        : (pastDim ? 1.0 : null);
     final rawH = (e - s) * ppm;
     final h = max(rawH - 3, 20.0);
     final compact = h < 44;
@@ -7351,10 +7353,12 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
         : const <DeepWorkTodoItem>[];
     final deepTodoCount = deepTodos.length;
     // Vergangene Blöcke sind komplett gefüllt, der laufende anteilig; Schein nur beim laufenden.
+    // Vergangene Blöcke: voll gefüllt (Fortschritt 100 %), die Karte wird außen abgedunkelt.
+    final pastFilled = !isLiveNow && _isBlockPast(block);
     final liveFillFrac = isLiveNow
         ? _slotElapsedFractionWhileLive(block)
-        : null;
-    final activeLiveForeground = isLiveNow && !mealVis;
+        : (pastFilled ? 1.0 : null);
+    final activeLiveForeground = (isLiveNow || pastFilled) && !mealVis;
     // Zeitspalte + Icon-Leiste liegen außerhalb der Füllung: nur der laufende Block wird hervorgehoben.
     final railLive = isLiveNow && !mealVis;
     final liveLightUi = activeLiveForeground && !p.isDark;
