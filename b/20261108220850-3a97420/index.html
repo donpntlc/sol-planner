@@ -14,7 +14,7 @@
     This is a placeholder for base href that will be replaced by the value of
     the `--base-href` argument provided to `flutter build`.
   -->
-  <base href="/sol-planner/b/20261106084228-bdc2f9b/">
+  <base href="/sol-planner/b/20261108220850-3a97420/">
 
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -49,6 +49,31 @@
     * https://docs.flutter.dev/platform-integration/web/initialization
   -->
   <div id="flutter_host"></div>
+  <script>
+    // Kalenderdatei (.ics) speichern bzw. teilen → iPhone fragt „Zum Kalender hinzufügen“.
+    window.solSaveIcs = function (name, text, share) {
+      var blob = new Blob([text], { type: 'text/calendar;charset=utf-8' });
+      if (share && navigator.canShare) {
+        try {
+          var f = new File([blob], name, { type: 'text/calendar' });
+          if (navigator.canShare({ files: [f] })) {
+            navigator.share({ files: [f], title: name }).catch(function () {});
+            return 'shared';
+          }
+        } catch (e) {}
+      }
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = name;
+      a.rel = 'noopener';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
+      return 'download';
+    };
+  </script>
   <script>
     // Ränder des iPhones (Statusleiste, Home-Leiste) messen und an die App geben.
     (function () {
