@@ -16,6 +16,7 @@ import 'package:sol/planner_notifications.dart';
 import 'package:sol/planner_reminder_prefs.dart';
 import 'package:sol/project_rotation.dart';
 import 'package:sol/web_safe_area.dart';
+import 'package:sol/calendar_export.dart';
 import 'package:sol/reminder_prefs_sheet.dart';
 import 'package:sol/widgets/block_session_live_strip.dart';
 import 'package:sol/widgets/current_task/current_task_package.dart';
@@ -29,7 +30,7 @@ import 'package:sol/cloud/sol_planner_sync_hook.dart';
 const double _kAppUiScale = 0.88;
 
 /// Deckkraft vergangener Blöcke (dunkler = kleiner).
-const double _kPastBlockOpacity = 0.42;
+const double _kPastBlockOpacity = 0.72;
 
 const _kColorPickerDragScale =
     0.48; // <1: gleiche Fingerbewegung → kleinere Farbänderung (feinere Bedienung).
@@ -3511,7 +3512,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                     child: IgnorePointer(
                       child: _liveProgressStripeFill(
                         fraction: gridFillFrac.clamp(0.0, 1.0),
-                        stripe: edge,
+                        stripe: pastDim ? _pastFillColor(edge) : edge,
                         clipCornerRadius: 11,
                       ),
                     ),
@@ -6971,6 +6972,9 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
   }
 
   /// Streifen-Verlauf; [clipCornerRadius] ≈ Innenkante der Karte (leicht erweitert gegen Anti-Alias-Lücken).
+  /// Füllfarbe vergangener Blöcke: Kategoriefarbe, kräftig abgedunkelt (kein „Kreide“-Look).
+  Color _pastFillColor(Color c) => Color.lerp(c, Colors.black, 0.55)!;
+
   /// Block liegt komplett in der Vergangenheit (→ voll gefüllt dargestellt).
   bool _isBlockPast(TimeBlock b) {
     if (b.allDay) return false;
@@ -7358,7 +7362,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
     final liveFillFrac = isLiveNow
         ? _slotElapsedFractionWhileLive(block)
         : (pastFilled ? 1.0 : null);
-    final activeLiveForeground = (isLiveNow || pastFilled) && !mealVis;
+    final activeLiveForeground = isLiveNow && !mealVis;
     // Zeitspalte + Icon-Leiste liegen außerhalb der Füllung: nur der laufende Block wird hervorgehoben.
     final railLive = isLiveNow && !mealVis;
     final liveLightUi = activeLiveForeground && !p.isDark;
@@ -7757,8 +7761,9 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                         Positioned.fill(
                           child: _liveProgressStripeFill(
                             fraction: liveFillFrac.clamp(0.0, 1.0),
-                            stripe:
-                                openFreizeitSlot ? p.muted : stripe,
+                            stripe: pastFilled
+                                ? _pastFillColor(stripe)
+                                : (openFreizeitSlot ? p.muted : stripe),
                             clipCornerRadius: innerClipRadiusLive,
                           ),
                         ),
@@ -9883,6 +9888,130 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
               );
             }
 
+            Future<void> openPhoneReminderSheet() async {
+              var dayBefore = true;
+              int? minutesBefore = 15;
+              await showModalBottomSheet<void>(
+                context: context,
+                isScrollControlled: true,
+                backgroundColor: Colors.transparent,
+                builder: (cctx) {
+                  return StatefulBuilder(
+                    builder: (context, setLocal) {
+                      final p = context.palette;
+                      final title = titleCtrl.text.trim().isEmpty
+                          ? 'Termin'
+                          : titleCtrl.text.trim();
+                      final day = _onlyDay(_selectedDate);
+                      final start = day.add(
+                        Duration(minutes: allDay ? 0 : draftStart),
+                      );
+                      var endMin = allDay ? 1440 : draftEnd;
+                      if (!allDay && endMin <= draftStart) endMin += 1440;
+                      final end = day.add(Duration(minutes: endMin));
+                      void save(bool share) {
+                        final ics = buildIcs(
+                          uid:
+                              '${editing?.id ?? 'neu'}-${day.millisecondsSinceEpoch}',
+                          title: title,
+                          start: start,
+                          end: end,
+                          allDay: allDay,
+                          notes: notesCtrl.text,
+                          remindDayBefore: dayBefore,
+                          remindMinutesBefore: minutesBefore,
+                        );
+                        var name = title
+                            .replaceAll(RegExp(r'[^A-Za-z0-9ÄÖÜäöüß _-]'), '')
+                            .trim()
+                            .replaceAll(' ', '_');
+                        if (name.isEmpty) name = 'Termin';
+                        saveIcsFile('$name.ics', ics, share: share);
+                        Navigator.pop(cctx);
+                      }
+
+                      String chipLabel(int? m) {
+                        if (m == null) return 'Aus';
+                        if (m == 60) return '1 Std';
+                        return '$m Min';
+                      }
+
+                      return _sheetFrame(cctx, [
+                        _eyebrow(context, 'ERINNERUNG AUFS HANDY'),
+                        const SizedBox(height: 4),
+                        Text(
+                          title,
+                          style: Theme.of(context).textTheme.titleLarge
+                              ?.copyWith(
+                                fontWeight: FontWeight.w800,
+                                color: p.text,
+                              ),
+                        ),
+                        Text(
+                          '${_dateSheetHeading(_selectedDate)} · '
+                          '${allDay ? 'Ganztags' : '${_fmtMin(draftStart)}–${_fmtMin(draftEnd % 1440)}'}',
+                          style: TextStyle(color: p.muted),
+                        ),
+                        const SizedBox(height: 10),
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: Text(
+                            'Am Vortag erinnern',
+                            style: TextStyle(color: p.text),
+                          ),
+                          subtitle: Text(
+                            '24 Stunden vorher',
+                            style: TextStyle(color: p.muted),
+                          ),
+                          value: dayBefore,
+                          onChanged: (v) => setLocal(() => dayBefore = v),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Kurz vorher',
+                          style: TextStyle(
+                            color: p.text,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            for (final m in const <int?>[null, 5, 10, 15, 30, 60])
+                              ChoiceChip(
+                                label: Text(chipLabel(m)),
+                                selected: minutesBefore == m,
+                                onSelected: (_) =>
+                                    setLocal(() => minutesBefore = m),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Der Termin kommt mit diesen Erinnerungen in deinen Handy-Kalender. '
+                          'Von dort bekommst du eine echte Mitteilung, auch wenn die App zu ist. '
+                          'Danach einfach „Zum Kalender hinzufügen“ bestätigen.',
+                          style: TextStyle(color: p.muted, height: 1.35),
+                        ),
+                        const SizedBox(height: 14),
+                        FilledButton.icon(
+                          onPressed: () => save(false),
+                          icon: const Icon(Icons.event_available_rounded),
+                          label: const Text('Zum Kalender hinzufügen'),
+                        ),
+                        TextButton(
+                          onPressed: () => save(true),
+                          child: const Text('Stattdessen über „Teilen“ senden'),
+                        ),
+                      ]);
+                    },
+                  );
+                },
+              );
+            }
+
             Widget infoRow({
               required IconData icon,
               required String title,
@@ -10862,6 +10991,44 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                                     ),
                                   ),
                                 ],
+                                const SizedBox(height: 10),
+                                Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Material(
+                                    color: p.surface,
+                                    shape: StadiumBorder(
+                                      side: BorderSide(color: p.hairline),
+                                    ),
+                                    child: InkWell(
+                                      customBorder: const StadiumBorder(),
+                                      onTap: openPhoneReminderSheet,
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 18,
+                                          vertical: 12,
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              Icons.phone_iphone_rounded,
+                                              size: 20,
+                                              color: p.accent,
+                                            ),
+                                            const SizedBox(width: 10),
+                                            Text(
+                                              'Erinnerung aufs Handy',
+                                              style: TextStyle(
+                                                color: p.text,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
                                 const SizedBox(height: 14),
                                 Container(
                                   decoration: BoxDecoration(
