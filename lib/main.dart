@@ -3472,7 +3472,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
       width: width - 2,
       height: h,
       child: Opacity(
-        opacity: pastDim ? _kPastBlockOpacity : 1.0,
+        opacity: pastDim ? (p.isDark ? _kPastBlockOpacity : 0.8) : 1.0,
         child: Material(
         color: Colors.transparent,
         child: InkWell(
@@ -3512,7 +3512,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                     child: IgnorePointer(
                       child: _liveProgressStripeFill(
                         fraction: gridFillFrac.clamp(0.0, 1.0),
-                        stripe: pastDim ? _pastFillColor(edge) : edge,
+                        stripe: pastDim ? _pastFillColor(edge, p) : edge,
                         clipCornerRadius: 11,
                       ),
                     ),
@@ -6973,7 +6973,10 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
 
   /// Streifen-Verlauf; [clipCornerRadius] ≈ Innenkante der Karte (leicht erweitert gegen Anti-Alias-Lücken).
   /// Füllfarbe vergangener Blöcke: Kategoriefarbe, kräftig abgedunkelt (kein „Kreide“-Look).
-  Color _pastFillColor(Color c) => Color.lerp(c, Colors.black, 0.55)!;
+  /// Dunkel: Richtung Schwarz. Hell: blasser Farbton, damit Text lesbar bleibt.
+  Color _pastFillColor(Color c, AppPalette p) => p.isDark
+      ? Color.lerp(c, Colors.black, 0.55)!
+      : Color.lerp(c, Colors.white, 0.55)!;
 
   /// Block liegt komplett in der Vergangenheit (→ voll gefüllt dargestellt).
   bool _isBlockPast(TimeBlock b) {
@@ -7309,7 +7312,8 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
     );
     final past = !_isWallClockActiveBlock(block) && _isBlockPast(block);
     if (!past || selected || flexSpotlight) return card;
-    return Opacity(opacity: _kPastBlockOpacity, child: card);
+    final op = context.palette.isDark ? _kPastBlockOpacity : 0.8;
+    return Opacity(opacity: op, child: card);
   }
 
   Widget _blockCardInner(
@@ -7762,7 +7766,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                           child: _liveProgressStripeFill(
                             fraction: liveFillFrac.clamp(0.0, 1.0),
                             stripe: pastFilled
-                                ? _pastFillColor(stripe)
+                                ? _pastFillColor(stripe, p)
                                 : (openFreizeitSlot ? p.muted : stripe),
                             clipCornerRadius: innerClipRadiusLive,
                           ),
