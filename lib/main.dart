@@ -10514,9 +10514,9 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                 child: Row(
                   children: [
                     SizedBox(
-                      width: 72,
+                      width: 80,
                       child: Text(
-                        label,
+                        '$label:',
                         style: TextStyle(
                           color: p.text,
                           fontWeight: FontWeight.w700,
