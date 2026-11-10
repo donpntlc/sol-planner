@@ -9066,20 +9066,56 @@ if (expanded && subTotal > 0) ...[
                                                           CrossAxisAlignment
                                                               .start,
                                                       children: [
-                                                        Icon(
-                                                          s.done
-                                                              ? Icons
-                                                                    .check_box_rounded
-                                                              : Icons
-                                                                    .check_box_outline_blank_rounded,
-                                                          size: 17,
-                                                          color:
-                                                              activeLiveForeground
-                                                              ? liveInk
-                                                              : p.muted,
-                                                        ),
-                                                        const SizedBox(
-                                                          width: 8,
+                                                        GestureDetector(
+                                                          behavior:
+                                                              HitTestBehavior
+                                                                  .opaque,
+                                                          onTap: () {
+                                                            final idx = block
+                                                                .subtasks
+                                                                .indexOf(s);
+                                                            if (idx < 0) return;
+                                                            setState(() {
+                                                              block.subtasks[idx] =
+                                                                  s.copyWith(
+                                                                    done:
+                                                                        !s.done,
+                                                                  );
+                                                            });
+                                                            _schedulePersistDayPlans();
+                                                          },
+                                                          child: Padding(
+                                                            padding:
+                                                                const EdgeInsets.only(
+                                                                  right: 9,
+                                                                  top: 1,
+                                                                ),
+                                                            child: Container(
+                                                              width: 18,
+                                                              height: 18,
+                                                              decoration: BoxDecoration(
+                                                                shape: BoxShape
+                                                                    .circle,
+                                                                color: s.done
+                                                                    ? stripe
+                                                                    : Colors
+                                                                          .transparent,
+                                                                border: Border.all(
+                                                                  color: stripe,
+                                                                  width: 1.6,
+                                                                ),
+                                                              ),
+                                                              child: s.done
+                                                                  ? Icon(
+                                                                      Icons
+                                                                          .check_rounded,
+                                                                      size: 12,
+                                                                      color:
+                                                                          p.bg,
+                                                                    )
+                                                                  : null,
+                                                            ),
+                                                          ),
                                                         ),
                                                         Expanded(
                                                           child: Text(
@@ -10629,6 +10665,10 @@ if (expanded && subTotal > 0) ...[
               );
             }
 
+            final checkCol =
+                (!useCategoryStripe && draftCustomStripeHex != null)
+                ? _colorFromHexString(draftCustomStripeHex!)
+                : _stripeColor(colorLabel);
             Widget macroSection() {
               final title = titleCtrl.text;
               final cur = _macroPlan.mealFor(title);
@@ -12116,15 +12156,15 @@ if (expanded && subTotal > 0) ...[
                                                       decoration: BoxDecoration(
                                                         shape: BoxShape.circle,
                                                         color: st.done
-                                                            ? p.accent
+                                                            ? checkCol
                                                             : Colors.transparent,
                                                         border: Border.all(
                                                           color: st.done
-                                                              ? p.accent
-                                                              : p.muted
+                                                              ? checkCol
+                                                              : checkCol
                                                                     .withValues(
                                                                       alpha:
-                                                                          0.6,
+                                                                          0.75,
                                                                     ),
                                                           width: 1.6,
                                                         ),
