@@ -31,7 +31,7 @@ import 'package:sol/cloud/sol_planner_sync_hook.dart';
 const double _kAppUiScale = 0.88;
 
 /// Deckkraft vergangener Blöcke (dunkler = kleiner).
-const double _kPastBlockOpacity = 0.6;
+const double _kPastBlockOpacity = 0.8;
 
 const _kColorPickerDragScale =
     0.48; // <1: gleiche Fingerbewegung → kleinere Farbänderung (feinere Bedienung).
@@ -7730,7 +7730,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
     final grey = Color.from(alpha: 1, red: l, green: l, blue: l);
     final muted = Color.lerp(c, grey, 0.55)!;
     return p.isDark
-        ? Color.lerp(muted, Colors.black, 0.32)!
+        ? Color.lerp(muted, Colors.black, 0.56)!
         : Color.lerp(muted, Colors.white, 0.55)!;
   }
 
