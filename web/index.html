@@ -34,7 +34,8 @@
   <title>SOL Planner</title>
   <meta name="theme-color" content="#121212">
   <style>
-    html,body{background:#121212;margin:0;height:100%;overflow:hidden}
+    html,body{background:#121212;margin:0;height:100%;overflow:hidden;overscroll-behavior:none}
+    body{position:fixed;inset:0;touch-action:manipulation}
     #flutter_host{position:fixed;inset:0}
   </style>
   <link rel="manifest" href="manifest.json">
@@ -49,6 +50,23 @@
     * https://docs.flutter.dev/platform-integration/web/initialization
   -->
   <div id="flutter_host"></div>
+  <script>
+    // iPhone: Seite darf nie verrutschen (sonst stimmen Tipp-Position und Anzeige nicht überein).
+    (function () {
+      function reset() {
+        if (window.scrollX || window.scrollY) window.scrollTo(0, 0);
+        var se = document.scrollingElement;
+        if (se && (se.scrollTop || se.scrollLeft)) { se.scrollTop = 0; se.scrollLeft = 0; }
+      }
+      window.addEventListener('scroll', reset, { passive: true });
+      document.addEventListener('focusout', function () { setTimeout(reset, 50); setTimeout(reset, 400); });
+      window.addEventListener('resize', function () { setTimeout(reset, 50); });
+      window.addEventListener('pageshow', reset);
+      if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', function () { setTimeout(reset, 50); });
+      }
+    })();
+  </script>
   <script>
     // Datei wählen (z. B. PREPIT-Makroplan) und Text zurückgeben.
     window.solPickJsonFile = function () {
