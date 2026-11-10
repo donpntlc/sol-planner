@@ -970,30 +970,41 @@ List<PresetTaskLine> shiftPresetLines(List<PresetTaskLine> lines, int delta) {
   }).toList();
 }
 
-/// Deans Morgenroutine: Schritte als abhakbare Checkliste, Hintergrund als Notiz.
-const List<String> kMorningRoutineChecklist = [
+/// Alte Checklisten-Punkte der Morgenroutine (werden wieder entfernt, jetzt in den Notizen).
+const Set<String> _kOldMorningChecklist = {
   'Beten',
   'Bett machen',
   'WC',
   'Wasser + Creatin',
+  '50–100 Push-ups oder 30 min Cardio/Steps',
   '50–100 Push-ups / 30 min Cardio',
   'Eisdusche',
+  'Bible Study 30–60 min (an verplanten Tagen 1 h)',
   'Bible Study 30–60 min',
   'Skin Care',
   'Protein-Shake',
   'Kalender checken',
-];
+};
 
-const String kMorningRoutineNotes = """Bible Study: an verplanten Tagen morgens 1 h.
-50–100 Push-ups oder stattdessen 30 min Cardio/Steps.
+/// Deans Morgenroutine. Format: „## Überschrift“, „• Punkt“, „Titel – Text“ (Titel fett).
+const String kMorningRoutineNotes = """## Ablauf
+• Beten
+• Bett machen
+• WC
+• Wasser + Creatin
+• 50–100 Push-ups oder 30 min Cardio/Steps
+• Eisdusche
+• Bible Study 30–60 min (an verplanten Tagen morgens 1 h)
+• Skin Care
+• Protein-Shake
+• Kalender checken
 
-Warum Eisdusche?
-
-• Wach & Energie – kaltes Wasser aktiviert das Nervensystem, Adrenalin steigt: wacher als mit Kaffee.
-• Stimmung – fördert Endorphine, weniger Stress, bessere Laune.
-• Kreislauf – Gefäße ziehen sich zusammen und weiten sich wieder, die Durchblutung wird angeregt.
-• Immunsystem – regelmäßige Kältereize können es leicht stimulieren.
-• Willenskraft – die Überwindung am Morgen trainiert Disziplin.""";
+## Warum Eisdusche?
+• Wach & Energie – kaltes Wasser aktiviert das Nervensystem, Adrenalin steigt: wacher als mit Kaffee
+• Stimmung – fördert Endorphine, weniger Stress, bessere Laune
+• Kreislauf – Gefäße ziehen sich zusammen und weiten sich wieder, regt die Durchblutung an
+• Immunsystem – regelmäßige Kältereize können es leicht stimulieren
+• Willenskraft – die Überwindung am Morgen trainiert Disziplin""";
 
 bool _isMorningRoutineTitle(String t) {
   final x = t.toLowerCase().replaceAll('-', ' ');
@@ -5285,13 +5296,125 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
   /// Morgenroutine ohne eigene Notizen/Checkliste bekommt Deans Standard-Inhalt.
   TimeBlock _enrichMorningRoutine(TimeBlock b) {
     if (!_isMorningRoutineTitle(b.title)) return b;
-    if (b.notes.trim().isEmpty) b.notes = kMorningRoutineNotes;
-    if (b.subtasks.isEmpty) {
-      for (final t in kMorningRoutineChecklist) {
-        b.subtasks.add(BlockSubtask(id: _nextId(), title: t));
-      }
+    // Frühere automatische Checkliste wieder entfernen.
+    if (b.subtasks.isNotEmpty &&
+        b.subtasks.every((x) => _kOldMorningChecklist.contains(x.title))) {
+      b.subtasks.clear();
+    }
+    final n = b.notes.trim();
+    if (n.isEmpty ||
+        n.startsWith('Warum Eisdusche?') ||
+        n.startsWith('Bible Study: an verplanten Tagen')) {
+      b.notes = kMorningRoutineNotes;
     }
     return b;
+  }
+
+  /// Notizen hübsch anzeigen: „## Titel“ = kleine Überschrift mit Goldstrich,
+  /// „• …“/„- …“ = Aufzählung, „Fett – Rest“ = fetter Anfang.
+  Widget _formattedNotes(BuildContext context, String raw) {
+    final p = context.palette;
+    final out = <Widget>[];
+    Widget rich(String t, {double size = 14.5}) {
+      final i = t.indexOf(' – ');
+      if (i > 0 && i < 40) {
+        return Text.rich(
+          TextSpan(
+            children: [
+              TextSpan(
+                text: t.substring(0, i),
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+              TextSpan(
+                text: t.substring(i),
+                style: TextStyle(color: p.muted),
+              ),
+            ],
+          ),
+          style: TextStyle(color: p.text, fontSize: size, height: 1.4),
+        );
+      }
+      return Text(
+        t,
+        style: TextStyle(color: p.text, fontSize: size, height: 1.4),
+      );
+    }
+
+    for (final line in raw.split('\n')) {
+      final t = line.trim();
+      if (t.isEmpty) {
+        if (out.isNotEmpty) out.add(const SizedBox(height: 8));
+        continue;
+      }
+      if (t.startsWith('## ') || t.startsWith('# ')) {
+        final h = t.replaceFirst(RegExp(r'^#+\s*'), '');
+        out.add(
+          Padding(
+            padding: EdgeInsets.only(top: out.isEmpty ? 0 : 6, bottom: 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  h,
+                  style: TextStyle(
+                    color: p.text,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 15.5,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Container(
+                  width: 28,
+                  height: 2.5,
+                  decoration: BoxDecoration(
+                    color: p.accent,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+        continue;
+      }
+      final bullet = RegExp(r'^(•|-|\*)\s+').firstMatch(t);
+      if (bullet != null) {
+        out.add(
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(top: 8, right: 10, left: 2),
+                  child: Container(
+                    width: 5,
+                    height: 5,
+                    decoration: BoxDecoration(
+                      color: p.accent,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                ),
+                Expanded(child: rich(t.substring(bullet.end))),
+              ],
+            ),
+          ),
+        );
+        continue;
+      }
+      out.add(
+        Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: rich(t),
+        ),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: out,
+    );
   }
 
   /// Vorlagenzeilen ab [cutOffMin]: erste Zeile wird bei Bedarf bei [cutOffMin] angeschnitten
@@ -9325,6 +9448,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
   }) async {
     final titleCtrl = TextEditingController(text: editing?.title ?? '');
     final circleAddCtrl = TextEditingController();
+    var notesEditing = false;
     final notesCtrl = TextEditingController(text: editing?.notes ?? '');
     final subtaskInputCtrl = TextEditingController();
 
@@ -11238,18 +11362,55 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                                               crossAxisAlignment:
                                                   CrossAxisAlignment.start,
                                               children: [
-                                                Checkbox.adaptive(
-                                                  value: st.done,
-                                                  activeColor: p.text
-                                                      .withValues(alpha: 0.65),
-                                                  onChanged: (v) {
-                                                    setSheet(() {
-                                                      draftSubtasks[i] = st
-                                                          .copyWith(
-                                                            done: v ?? false,
-                                                          );
-                                                    });
-                                                  },
+                                                GestureDetector(
+                                                  behavior:
+                                                      HitTestBehavior.opaque,
+                                                  onTap: () => setSheet(() {
+                                                    draftSubtasks[i] = st
+                                                        .copyWith(
+                                                          done: !st.done,
+                                                        );
+                                                  }),
+                                                  child: Padding(
+                                                    padding:
+                                                        const EdgeInsets.fromLTRB(
+                                                          4,
+                                                          3,
+                                                          12,
+                                                          4,
+                                                        ),
+                                                    child: AnimatedContainer(
+                                                      duration: const Duration(
+                                                        milliseconds: 160,
+                                                      ),
+                                                      width: 22,
+                                                      height: 22,
+                                                      decoration: BoxDecoration(
+                                                        shape: BoxShape.circle,
+                                                        color: st.done
+                                                            ? p.accent
+                                                            : Colors.transparent,
+                                                        border: Border.all(
+                                                          color: st.done
+                                                              ? p.accent
+                                                              : p.muted
+                                                                    .withValues(
+                                                                      alpha:
+                                                                          0.6,
+                                                                    ),
+                                                          width: 1.6,
+                                                        ),
+                                                      ),
+                                                      child: st.done
+                                                          ? Icon(
+                                                              Icons
+                                                                  .check_rounded,
+                                                              size: 15,
+                                                              color: p.bg,
+                                                            )
+                                                          : null,
+                                                    ),
+                                                  ),
                                                 ),
                                                 Expanded(
                                                   child: TextField(
@@ -11586,10 +11747,40 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                                         const SizedBox(height: 16),
                                         dividerRow(),
                                         const SizedBox(height: 12),
+                                        if (!notesEditing &&
+                                            notesCtrl.text.trim().isNotEmpty)
+                                          GestureDetector(
+                                            behavior: HitTestBehavior.opaque,
+                                            onTap: () => setSheet(
+                                              () => notesEditing = true,
+                                            ),
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.stretch,
+                                              children: [
+                                                _formattedNotes(
+                                                  context,
+                                                  notesCtrl.text,
+                                                ),
+                                                const SizedBox(height: 8),
+                                                Text(
+                                                  'Tippen zum Bearbeiten',
+                                                  style: TextStyle(
+                                                    color: p.muted.withValues(
+                                                      alpha: 0.7,
+                                                    ),
+                                                    fontSize: 11.5,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          )
+                                        else
                                         TextField(
                                           controller: notesCtrl,
+                                          autofocus: notesEditing,
                                           minLines: 3,
-                                          maxLines: 8,
+                                          maxLines: 14,
                                           style: TextStyle(
                                             color: p.text,
                                             height: 1.45,
