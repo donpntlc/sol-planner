@@ -1968,8 +1968,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
   ({int start, int end})? _flexReorderGhostRange;
 
   /// Beim Ziehen mehrerer Blöcke: die mitgezogenen (außer dem gegriffenen) einklappen.
-  final ValueNotifier<Set<String>> _flexDragHidden =
-      ValueNotifier<Set<String>>(<String>{});
+
   final Set<String> _expandedBlockIds = {};
   final Map<String, _SessionLiveProgress> _sessionLiveByKey = {};
   int _idCounter = 0;
@@ -6394,22 +6393,6 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
     return (start: start, end: end);
   }
 
-  /// Alle Blöcke, die beim Ziehen von Zeile [laneIndex] mitwandern (zusammenhängende Auswahl).
-  List<TimeBlock> _flexDragChunkForLane(
-    List<TimeBlock> blocks,
-    List<_ClockLane> lanes,
-    int laneIndex,
-  ) {
-    if (!_flexMode || laneIndex < 0 || laneIndex >= lanes.length) return const [];
-    final lane = lanes[laneIndex];
-    if (lane.isGap) return const [];
-    final TimeBlock b = lane.block!;
-    final i = blocks.indexOf(b);
-    if (i < 0) return [b];
-    final r = _flexReorderChunkBounds(blocks, i);
-    return blocks.sublist(r.start, r.end + 1);
-  }
-
   void _clearFlexReorderGhost() {
     if (_flexReorderGhostRange == null) return;
     setState(() => _flexReorderGhostRange = null);
@@ -6532,6 +6515,25 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
     final dayLanes = _showFreeTimeLanes
         ? _clockLanesForDay(blocks)
         : [for (final b in blocks) _ClockLane.block(b)];
+    // Flex: zusammenhängend markierte Blöcke als eine Gruppe → wandern beim Ziehen sichtbar zusammen.
+    final flexGroups = <String, List<TimeBlock>>{};
+    final flexGroupHidden = <String>{};
+    if (_flexMode) {
+      var i = 0;
+      while (i < blocks.length) {
+        final r = _flexReorderChunkBounds(blocks, i);
+        if (r.end > r.start) {
+          final g = blocks.sublist(r.start, r.end + 1);
+          flexGroups[g.first.id] = g;
+          for (final b in g.skip(1)) {
+            flexGroupHidden.add(b.id);
+          }
+          i = r.end + 1;
+        } else {
+          i++;
+        }
+      }
+    }
 
     return Scaffold(
       backgroundColor: context.palette.bg,
@@ -6746,187 +6748,25 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                       listBottomPad,
                     ),
                     itemCount: dayLanes.length,
-                    onReorder: (o, n) {
-                      _flexDragHidden.value = <String>{};
-                      _flexDayReorderFromLanes(o, n);
-                    },
-                    onReorderStart: (i) {
-                      final chunk = _flexDragChunkForLane(blocks, dayLanes, i);
-                      if (chunk.length < 2) return;
-                      final lead = dayLanes[i].block!;
-                      _flexDragHidden.value = {
-                        for (final b in chunk)
-                          if (b.id != lead.id) b.id,
-                      };
-                    },
-                    onReorderEnd: (_) {
-                      if (_flexDragHidden.value.isEmpty) return;
-                      _flexDragHidden.value = <String>{};
-                    },
+                    onReorder: _flexDayReorderFromLanes,
                     proxyDecorator:
                         (Widget child, int index, Animation<double> ani) {
                           final a = CurvedAnimation(
                             parent: ani,
                             curve: Curves.easeOutCubic,
                           );
-                          final chunk = _flexDragChunkForLane(
-                            blocks,
-                            dayLanes,
-                            index,
-                          );
-                          final lead = index < dayLanes.length
-                              ? dayLanes[index].block
-                              : null;
-                          final li = lead == null ? -1 : chunk.indexOf(lead);
-                          final before = li > 0
-                              ? chunk.sublist(0, li)
-                              : const <TimeBlock>[];
-                          final after = li >= 0 && li < chunk.length - 1
-                              ? chunk.sublist(li + 1)
-                              : const <TimeBlock>[];
-                          Widget card(TimeBlock b) {
-                            final p = context.palette;
-                            final c = _stripeForBlock(b);
-                            return Padding(
-                              padding: const EdgeInsets.only(bottom: 8),
-                              child: Container(
-                                padding: const EdgeInsets.fromLTRB(
-                                  14,
-                                  12,
-                                  14,
-                                  12,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Color.alphaBlend(
-                                    c.withValues(alpha: 0.22),
-                                    p.surface,
-                                  ),
-                                  borderRadius: BorderRadius.circular(16),
-                                  border: Border.all(
-                                    color: c.withValues(alpha: 0.8),
-                                    width: 1.4,
-                                  ),
-                                ),
-                                child: Row(
-                                  children: [
-                                    Text(
-                                      _fmtMin(b.startMin),
-                                      style: TextStyle(
-                                        color: p.muted,
-                                        fontSize: 12.5,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Text(
-                                        b.title,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(
-                                          color: p.text,
-                                          fontWeight: FontWeight.w800,
-                                          fontSize: 15,
-                                        ),
-                                      ),
-                                    ),
-                                    Text(
-                                      _fmtDurationShort(b.duration),
-                                      style: TextStyle(
-                                        color: p.muted,
-                                        fontSize: 12.5,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            );
-                          }
                           return AnimatedBuilder(
                             animation: a,
                             builder: (context, _) {
                               final t = a.value;
-                              Widget lifted(Widget w) => Material(
+                              return Material(
                                 elevation: 8 * t,
                                 shadowColor: Colors.black38,
                                 borderRadius: BorderRadius.circular(16),
                                 clipBehavior: Clip.antiAlias,
                                 child: Opacity(
                                   opacity: 0.94 + 0.06 * t,
-                                  child: w,
-                                ),
-                              );
-                              if (before.isEmpty && after.isEmpty) {
-                                return lifted(child);
-                              }
-                              const miniH = 56.0;
-                              final pt = Uri.base.queryParameters['pt'] ?? '';
-                              if (pt == 'a') {
-                                return LayoutBuilder(
-                                  builder: (context, c) => Column(
-                                    children: [
-                                      Expanded(child: lifted(child)),
-                                    ],
-                                  ),
-                                );
-                              }
-                              if (pt == 'b' || pt == 'c') {
-                                return LayoutBuilder(
-                                  builder: (context, c) {
-                                    final h = c.maxHeight;
-                                    final total = h +
-                                        miniH * (before.length + after.length);
-                                    final col = Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.stretch,
-                                      children: [
-                                        for (final b in before)
-                                          SizedBox(
-                                            height: miniH,
-                                            child: card(b),
-                                          ),
-                                        Expanded(child: lifted(child)),
-                                        for (final b in after)
-                                          SizedBox(
-                                            height: miniH,
-                                            child: card(b),
-                                          ),
-                                      ],
-                                    );
-                                    return OverflowBox(
-                                      alignment: Alignment.topCenter,
-                                      minHeight: total,
-                                      maxHeight: total,
-                                      child: pt == 'c'
-                                          ? col
-                                          : Transform.translate(
-                                              offset: Offset(
-                                                0,
-                                                -miniH * before.length,
-                                              ),
-                                              child: col,
-                                            ),
-                                    );
-                                  },
-                                );
-                              }
-                              return LayoutBuilder(
-                                builder: (context, c) => Transform.translate(
-                                  offset: Offset(0, -miniH * before.length),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.stretch,
-                                    children: [
-                                      for (final b in before)
-                                        SizedBox(height: miniH, child: card(b)),
-                                      SizedBox(
-                                        height: c.maxHeight,
-                                        child: lifted(child),
-                                      ),
-                                      for (final b in after)
-                                        SizedBox(height: miniH, child: card(b)),
-                                    ],
-                                  ),
+                                  child: child,
                                 ),
                               );
                             },
@@ -6957,23 +6797,49 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                       final selected = _selectedBlockIds.contains(block.id);
                       final flexSpotlight =
                           flexFocusId != null && block.id == flexFocusId;
-                      return ValueListenableBuilder<Set<String>>(
-                        key: ValueKey<String>(block.id),
-                        valueListenable: _flexDragHidden,
-                        builder: (context, hidden, child) =>
-                            hidden.contains(block.id)
-                            ? const SizedBox(height: 0)
-                            : child!,
-                        child: Padding(
+                      if (flexGroupHidden.contains(block.id)) {
+                        return SizedBox(
+                          key: ValueKey<String>(block.id),
+                          height: 0,
+                        );
+                      }
+                      final group = flexGroups[block.id];
+                      if (group != null) {
+                        return Padding(
+                          key: ValueKey<String>(block.id),
                           padding: pad,
-                          child: _blockCard(
-                            context,
-                            block,
-                            selected,
-                            flexSpotlight,
-                            flexListIndex: _flexMode ? index : null,
-                            flexDragAnchorIndex: flexDragAnchorIdx,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              for (var gi = 0; gi < group.length; gi++)
+                                Padding(
+                                  padding: EdgeInsets.only(
+                                    bottom: gi == group.length - 1 ? 0 : 8,
+                                  ),
+                                  child: _blockCard(
+                                    context,
+                                    group[gi],
+                                    true,
+                                    flexFocusId != null &&
+                                        group[gi].id == flexFocusId,
+                                    flexListIndex: index,
+                                    flexDragAnchorIndex: flexDragAnchorIdx,
+                                  ),
+                                ),
+                            ],
                           ),
+                        );
+                      }
+                      return Padding(
+                        key: ValueKey<String>(block.id),
+                        padding: pad,
+                        child: _blockCard(
+                          context,
+                          block,
+                          selected,
+                          flexSpotlight,
+                          flexListIndex: _flexMode ? index : null,
+                          flexDragAnchorIndex: flexDragAnchorIdx,
                         ),
                       );
                     },
