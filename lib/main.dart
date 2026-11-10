@@ -1015,7 +1015,8 @@ const Map<String, String> kPresetBlockNotes = {
 • 15–45 min Stairmaster (Zone 2)
 
 ## Restday
-• Mind. 60 min Steps sammeln + Podcast (geht auch ohne)""",
+• Haus sauber machen – Zeit zum Putzen
+• Danach mind. 60 min Steps sammeln + Podcast (geht auch ohne)""",
   'shower post workout': """## Ablauf
 • Elektrolyte
 • Magerquark aus dem TK in den Kühlschrank
@@ -1056,6 +1057,16 @@ const Map<String, String> kPresetBlockNotes = {
 • Klamotten für morgen rauslegen""",
   'go to bed': """• 6 h Schlaf = top
 • Ab 23:15 ins Bett, ab 23:30 schlafen""",
+};
+
+/// Frühere Fassungen der Preset-Texte (werden automatisch aktualisiert).
+const Set<String> _kOldPresetBlockNotes = {
+  """## Training
+• Workout
+• 15–45 min Stairmaster (Zone 2)
+
+## Restday
+• Mind. 60 min Steps sammeln + Podcast (geht auch ohne)""",
 };
 
 String _presetNotesKey(String t) => t
@@ -5571,7 +5582,11 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
   TimeBlock _enrichMorningRoutine(TimeBlock b) {
     if (!_isMorningRoutineTitle(b.title)) {
       final txt = kPresetBlockNotes[_presetNotesKey(b.title)];
-      if (txt != null && b.notes.trim().isEmpty) b.notes = txt;
+      if (txt != null &&
+          (b.notes.trim().isEmpty ||
+              _kOldPresetBlockNotes.contains(b.notes.trim()))) {
+        b.notes = txt;
+      }
       return b;
     }
     // Frühere automatische Checkliste wieder entfernen.
