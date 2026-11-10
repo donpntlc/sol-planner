@@ -1898,7 +1898,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
   ProjectRotation _projectRotation = ProjectRotation();
 
   /// Raster-Ansicht (Zeitraster) statt Liste.
-  bool _dayGridView = true;
+  bool _dayGridView = false;
   final ScrollController _gridScroll = ScrollController();
   DateTime? _gridScrolledForDay;
   bool _showFreeTimeLanes = true;
@@ -3096,12 +3096,12 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
 
   static const double _kGridHourH = 64.0;
   static const double _kGridGutterW = 46.0;
-  static const String _kDayGridViewPrefKey = 'planner_day_grid_view_v1';
+  static const String _kDayGridViewPrefKey = 'planner_day_grid_view_v2';
 
   Future<void> _loadDayGridView() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final on = prefs.getBool(_kDayGridViewPrefKey) ?? true;
+      final on = prefs.getBool(_kDayGridViewPrefKey) ?? false;
       if (!mounted) return;
       setState(() => _dayGridView = on);
     } catch (_) {}
