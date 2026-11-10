@@ -6860,6 +6860,56 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                                 return lifted(child);
                               }
                               const miniH = 56.0;
+                              final pt = Uri.base.queryParameters['pt'] ?? '';
+                              if (pt == 'a') {
+                                return LayoutBuilder(
+                                  builder: (context, c) => Column(
+                                    children: [
+                                      Expanded(child: lifted(child)),
+                                    ],
+                                  ),
+                                );
+                              }
+                              if (pt == 'b' || pt == 'c') {
+                                return LayoutBuilder(
+                                  builder: (context, c) {
+                                    final h = c.maxHeight;
+                                    final total = h +
+                                        miniH * (before.length + after.length);
+                                    final col = Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.stretch,
+                                      children: [
+                                        for (final b in before)
+                                          SizedBox(
+                                            height: miniH,
+                                            child: card(b),
+                                          ),
+                                        Expanded(child: lifted(child)),
+                                        for (final b in after)
+                                          SizedBox(
+                                            height: miniH,
+                                            child: card(b),
+                                          ),
+                                      ],
+                                    );
+                                    return OverflowBox(
+                                      alignment: Alignment.topCenter,
+                                      minHeight: total,
+                                      maxHeight: total,
+                                      child: pt == 'c'
+                                          ? col
+                                          : Transform.translate(
+                                              offset: Offset(
+                                                0,
+                                                -miniH * before.length,
+                                              ),
+                                              child: col,
+                                            ),
+                                    );
+                                  },
+                                );
+                              }
                               return LayoutBuilder(
                                 builder: (context, c) => Transform.translate(
                                   offset: Offset(0, -miniH * before.length),
