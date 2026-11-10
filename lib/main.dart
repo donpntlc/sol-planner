@@ -1029,7 +1029,6 @@ const Map<String, String> kPresetBlockNotes = {
   'trading cash open': """## Vorher: kurze Pause + Snack
 • 2x Black Tea (2 Beutel je Tasse) – 50–150 mg Koffein, ideal für stabile Konzentration (nur wenn nötig)
 • Snack – z. B. Magerquark-Shake + einfache Carbs
-• Makros – Carbs 10–15 % / 20–30 g · Protein 15–25 % / 30–50 g · Fett 20–30 % / 12–18 g
 • Etwas Bewegung, an die frische Luft
 
 ## Marktanalyse
@@ -1061,6 +1060,17 @@ const Map<String, String> kPresetBlockNotes = {
 
 /// Frühere Fassungen der Preset-Texte (werden automatisch aktualisiert).
 const Set<String> _kOldPresetBlockNotes = {
+  """## Vorher: kurze Pause + Snack
+• 2x Black Tea (2 Beutel je Tasse) – 50–150 mg Koffein, ideal für stabile Konzentration (nur wenn nötig)
+• Snack – z. B. Magerquark-Shake + einfache Carbs
+• Makros – Carbs 10–15 % / 20–30 g · Protein 15–25 % / 30–50 g · Fett 20–30 % / 12–18 g
+• Etwas Bewegung, an die frische Luft
+
+## Marktanalyse
+• Heutigen Tag auswerten, Erwartungen mit Screenshot ins Trading Journal
+
+## Cash Open
+• Backtesting / Trading""",
   """## Training
 • Workout
 • 15–45 min Stairmaster (Zone 2)
