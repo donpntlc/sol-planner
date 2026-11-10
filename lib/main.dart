@@ -6862,40 +6862,42 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                               if (before.isEmpty && after.isEmpty) {
                                 return lifted(child);
                               }
-                              return LayoutBuilder(
-                                builder: (context, c) {
-                                  final h = c.maxHeight;
-                                  return Stack(
-                                    clipBehavior: Clip.none,
-                                    children: [
-                                      if (before.isNotEmpty)
-                                        Positioned(
-                                          left: 0,
-                                          right: 0,
-                                          bottom: h,
-                                          child: Column(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              for (final b in before) card(b),
-                                            ],
-                                          ),
+                              return Stack(
+                                fit: StackFit.expand,
+                                clipBehavior: Clip.none,
+                                children: [
+                                  lifted(child),
+                                  if (before.isNotEmpty)
+                                    OverflowBox(
+                                      alignment: Alignment.topCenter,
+                                      minHeight: 0,
+                                      maxHeight: double.infinity,
+                                      child: FractionalTranslation(
+                                        translation: const Offset(0, -1),
+                                        child: Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            for (final b in before) card(b),
+                                          ],
                                         ),
-                                      Positioned.fill(child: lifted(child)),
-                                      if (after.isNotEmpty)
-                                        Positioned(
-                                          left: 0,
-                                          right: 0,
-                                          top: h,
-                                          child: Column(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              for (final b in after) card(b),
-                                            ],
-                                          ),
+                                      ),
+                                    ),
+                                  if (after.isNotEmpty)
+                                    OverflowBox(
+                                      alignment: Alignment.bottomCenter,
+                                      minHeight: 0,
+                                      maxHeight: double.infinity,
+                                      child: FractionalTranslation(
+                                        translation: const Offset(0, 1),
+                                        child: Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            for (final b in after) card(b),
+                                          ],
                                         ),
-                                    ],
-                                  );
-                                },
+                                      ),
+                                    ),
+                                ],
                               );
                             },
                           );
@@ -15198,7 +15200,7 @@ class _BacklogQuickComposerState extends State<_BacklogQuickComposer> {
   }
 }
 
-const bool _kFlexCollapseTest = true;
+const bool _kFlexCollapseTest = false;
 
 String _fmtDurationShort(int m) {
   if (m < 60) return '$m min';
