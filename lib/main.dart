@@ -30,7 +30,7 @@ import 'package:sol/cloud/sol_planner_sync_hook.dart';
 const double _kAppUiScale = 0.88;
 
 /// Deckkraft vergangener Blöcke (dunkler = kleiner).
-const double _kPastBlockOpacity = 0.72;
+const double _kPastBlockOpacity = 0.6;
 
 const _kColorPickerDragScale =
     0.48; // <1: gleiche Fingerbewegung → kleinere Farbänderung (feinere Bedienung).
@@ -6975,7 +6975,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
   /// Füllfarbe vergangener Blöcke: Kategoriefarbe, kräftig abgedunkelt (kein „Kreide“-Look).
   /// Dunkel: Richtung Schwarz. Hell: blasser Farbton, damit Text lesbar bleibt.
   Color _pastFillColor(Color c, AppPalette p) => p.isDark
-      ? Color.lerp(c, Colors.black, 0.55)!
+      ? Color.lerp(c, Colors.black, 0.72)!
       : Color.lerp(c, Colors.white, 0.55)!;
 
   /// Block liegt komplett in der Vergangenheit (→ voll gefüllt dargestellt).
