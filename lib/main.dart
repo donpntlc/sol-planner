@@ -976,15 +976,18 @@ const List<String> kMorningRoutineChecklist = [
   'Bett machen',
   'WC',
   'Wasser + Creatin',
-  '50–100 Push-ups oder 30 min Cardio/Steps',
+  '50–100 Push-ups / 30 min Cardio',
   'Eisdusche',
-  'Bible Study 30–60 min (an verplanten Tagen 1 h)',
+  'Bible Study 30–60 min',
   'Skin Care',
   'Protein-Shake',
   'Kalender checken',
 ];
 
-const String kMorningRoutineNotes = """Warum Eisdusche?
+const String kMorningRoutineNotes = """Bible Study: an verplanten Tagen morgens 1 h.
+50–100 Push-ups oder stattdessen 30 min Cardio/Steps.
+
+Warum Eisdusche?
 
 • Wach & Energie – kaltes Wasser aktiviert das Nervensystem, Adrenalin steigt: wacher als mit Kaffee.
 • Stimmung – fördert Endorphine, weniger Stress, bessere Laune.
