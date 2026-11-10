@@ -6922,7 +6922,8 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                         );
                       }
                       final block = lane.block!;
-                      if (_flexDragHiddenIds.contains(block.id)) {
+                      if (_flexDragHiddenIds.contains(block.id) &&
+                          !_kFlexCollapseTest) {
                         return SizedBox(
                           key: ValueKey<String>(block.id),
                           height: 0,
@@ -15196,6 +15197,8 @@ class _BacklogQuickComposerState extends State<_BacklogQuickComposer> {
     );
   }
 }
+
+const bool _kFlexCollapseTest = true;
 
 String _fmtDurationShort(int m) {
   if (m < 60) return '$m min';
