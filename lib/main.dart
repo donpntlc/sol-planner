@@ -6859,6 +6859,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                               if (before.isEmpty && after.isEmpty) {
                                 return lifted(child);
                               }
+                              if (_kFlexProxyTest) return lifted(child);
                               return Stack(
                                 fit: StackFit.expand,
                                 clipBehavior: Clip.none,
@@ -15196,6 +15197,8 @@ class _BacklogQuickComposerState extends State<_BacklogQuickComposer> {
     );
   }
 }
+
+const bool _kFlexProxyTest = true;
 
 String _fmtDurationShort(int m) {
   if (m < 60) return '$m min';
