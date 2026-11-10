@@ -3029,11 +3029,11 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
       ),
       (
         icon: Icons.restaurant_menu_rounded,
-        label: 'Makroplan importieren',
+        label: 'Makroplan',
         sub: _macroPlan.isEmpty
-            ? 'Aus PREPIT: Einstellungen → Makroplan exportieren'
+            ? 'Makros aus PREPIT übernehmen – kurze Anleitung'
             : 'Stand ${_macroPlan.created == null ? '–' : '${_macroPlan.created!.day}.${_macroPlan.created!.month}.'} · ${_macroPlan.meals.length} Mahlzeiten',
-        onTap: _importMacroPlan,
+        onTap: _openMacroPlanSheet,
       ),
       (
         icon: Icons.checklist_rounded,
@@ -3133,12 +3133,6 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                           color: p.muted,
                         ),
                         onTap: () {
-                          if (it.label == 'Makroplan importieren') {
-                            // Dateiauswahl muss direkt im Tipp starten.
-                            it.onTap();
-                            Navigator.pop(sheetCtx);
-                            return;
-                          }
                           Navigator.pop(sheetCtx, it.onTap);
                         },
                       ),
@@ -3159,6 +3153,167 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
     final m = await MacroPlan.load();
     if (!mounted) return;
     setState(() => _macroPlan = m);
+  }
+
+  Future<void> _openMacroPlanSheet() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) {
+        final p = sheetCtx.palette;
+        Widget step(int n, String title, String text) => Padding(
+          padding: const EdgeInsets.only(bottom: 14),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 26,
+                height: 26,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: p.accent.withValues(alpha: 0.18),
+                  border: Border.all(color: p.accent.withValues(alpha: 0.6)),
+                ),
+                child: Text(
+                  '$n',
+                  style: TextStyle(
+                    color: p.accent,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        color: p.text,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      text,
+                      style: TextStyle(color: p.muted, height: 1.35),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+        final created = _macroPlan.created;
+        return ClipRRect(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+          child: Material(
+            color: p.surface,
+            child: SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 10, 20, 16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        margin: const EdgeInsets.only(bottom: 14),
+                        decoration: BoxDecoration(
+                          color: p.hairline,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    Text(
+                      'Makroplan',
+                      style: TextStyle(
+                        color: p.text,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 20,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Container(
+                      width: 28,
+                      height: 2.5,
+                      decoration: BoxDecoration(
+                        color: p.accent,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      _macroPlan.isEmpty
+                          ? 'Noch kein Plan übernommen.'
+                          : 'Aktuell: ${_macroPlan.meals.length} Mahlzeiten'
+                                '${created == null ? '' : ' · Stand ${created.day}.${created.month}.${created.year}'}',
+                      style: TextStyle(color: p.muted),
+                    ),
+                    const SizedBox(height: 18),
+                    step(
+                      1,
+                      'In PREPIT exportieren',
+                      'Einstellungen → „Makroplan exportieren“. Datei in „Dateien“ sichern.',
+                    ),
+                    step(
+                      2,
+                      'Hier importieren',
+                      'Unten auf „Datei auswählen“ tippen und die PREPIT-Datei wählen.',
+                    ),
+                    step(
+                      3,
+                      'Block öffnen',
+                      'In Pre-/Post-Workout, Hauptmahlzeit oder Abendessen stehen die Makros. '
+                          'Bei anderen Blöcken oben in der Makros-Karte die Mahlzeit wählen.',
+                    ),
+                    Text(
+                      'Plan in PREPIT geändert? Einfach neu exportieren und importieren – deine Zuordnungen bleiben.',
+                      style: TextStyle(
+                        color: p.muted,
+                        fontSize: 12.5,
+                        height: 1.35,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    FilledButton.icon(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: p.text,
+                        foregroundColor: p.bg,
+                        minimumSize: const Size.fromHeight(50),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                      onPressed: () {
+                        // Dateiauswahl muss direkt im Tipp starten.
+                        unawaited(_importMacroPlan());
+                        Navigator.pop(sheetCtx);
+                      },
+                      icon: const Icon(Icons.file_open_rounded),
+                      label: Text(
+                        _macroPlan.isEmpty
+                            ? 'Datei auswählen'
+                            : 'Neue Datei importieren',
+                        style: const TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 
   /// Muss direkt im Tipp starten (Dateiauswahl auf dem iPhone).
