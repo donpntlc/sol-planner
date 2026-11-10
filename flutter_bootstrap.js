@@ -1,5 +1,8 @@
 // Übergangs-Shim für alte, noch zwischengespeicherte index.html: lädt die neueste Version.
 (function () {
+  function reset() { if (window.scrollX || window.scrollY) window.scrollTo(0, 0); }
+  window.addEventListener('scroll', reset, { passive: true });
+  document.addEventListener('focusout', function () { setTimeout(reset, 50); setTimeout(reset, 400); });
   if (!document.getElementById('flutter_host')) {
     var st = document.createElement('style');
     st.textContent = '#flutter_host{position:fixed;inset:0}';
