@@ -1968,7 +1968,8 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
   ({int start, int end})? _flexReorderGhostRange;
 
   /// Beim Ziehen mehrerer Blöcke: die mitgezogenen (außer dem gegriffenen) einklappen.
-  Set<String> _flexDragHiddenIds = <String>{};
+  final ValueNotifier<Set<String>> _flexDragHidden =
+      ValueNotifier<Set<String>>(<String>{});
   final Set<String> _expandedBlockIds = {};
   final Map<String, _SessionLiveProgress> _sessionLiveByKey = {};
   int _idCounter = 0;
@@ -6746,25 +6747,21 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                     ),
                     itemCount: dayLanes.length,
                     onReorder: (o, n) {
-                      if (_flexDragHiddenIds.isNotEmpty) {
-                        _flexDragHiddenIds = <String>{};
-                      }
+                      _flexDragHidden.value = <String>{};
                       _flexDayReorderFromLanes(o, n);
                     },
                     onReorderStart: (i) {
                       final chunk = _flexDragChunkForLane(blocks, dayLanes, i);
                       if (chunk.length < 2) return;
                       final lead = dayLanes[i].block!;
-                      setState(() {
-                        _flexDragHiddenIds = {
-                          for (final b in chunk)
-                            if (b.id != lead.id) b.id,
-                        };
-                      });
+                      _flexDragHidden.value = {
+                        for (final b in chunk)
+                          if (b.id != lead.id) b.id,
+                      };
                     },
                     onReorderEnd: (_) {
-                      if (_flexDragHiddenIds.isEmpty) return;
-                      setState(() => _flexDragHiddenIds = <String>{});
+                      if (_flexDragHidden.value.isEmpty) return;
+                      _flexDragHidden.value = <String>{};
                     },
                     proxyDecorator:
                         (Widget child, int index, Animation<double> ani) {
@@ -6924,26 +6921,26 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                         );
                       }
                       final block = lane.block!;
-                      if (_flexDragHiddenIds.contains(block.id) &&
-                          !_kFlexCollapseTest) {
-                        return SizedBox(
-                          key: ValueKey<String>(block.id),
-                          height: 0,
-                        );
-                      }
                       final selected = _selectedBlockIds.contains(block.id);
                       final flexSpotlight =
                           flexFocusId != null && block.id == flexFocusId;
-                      return Padding(
+                      return ValueListenableBuilder<Set<String>>(
                         key: ValueKey<String>(block.id),
-                        padding: pad,
-                        child: _blockCard(
-                          context,
-                          block,
-                          selected,
-                          flexSpotlight,
-                          flexListIndex: _flexMode ? index : null,
-                          flexDragAnchorIndex: flexDragAnchorIdx,
+                        valueListenable: _flexDragHidden,
+                        builder: (context, hidden, child) =>
+                            hidden.contains(block.id)
+                            ? const SizedBox(height: 0)
+                            : child!,
+                        child: Padding(
+                          padding: pad,
+                          child: _blockCard(
+                            context,
+                            block,
+                            selected,
+                            flexSpotlight,
+                            flexListIndex: _flexMode ? index : null,
+                            flexDragAnchorIndex: flexDragAnchorIdx,
+                          ),
                         ),
                       );
                     },
@@ -15199,8 +15196,6 @@ class _BacklogQuickComposerState extends State<_BacklogQuickComposer> {
     );
   }
 }
-
-const bool _kFlexCollapseTest = false;
 
 String _fmtDurationShort(int m) {
   if (m < 60) return '$m min';
