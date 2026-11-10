@@ -1966,6 +1966,9 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
   bool _flexMode = false;
   /// Während Flex-Ziehens: zusammenhängender Chunk — Liste zeigt Geister, der Proxy den ganzen Stapel.
   ({int start, int end})? _flexReorderGhostRange;
+
+  /// Beim Ziehen mehrerer Blöcke: die mitgezogenen (außer dem gegriffenen) einklappen.
+  Set<String> _flexDragHiddenIds = <String>{};
   final Set<String> _expandedBlockIds = {};
   final Map<String, _SessionLiveProgress> _sessionLiveByKey = {};
   int _idCounter = 0;
@@ -2097,17 +2100,62 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
     if (!mounted) return;
     final messenger = ScaffoldMessenger.of(context);
     messenger.clearSnackBars();
+    final p = context.palette;
     messenger.showSnackBar(
       SnackBar(
-        content: Text(message),
+        backgroundColor: p.surface,
+        elevation: 6,
         behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(color: p.hairline),
+        ),
         duration: const Duration(seconds: 6),
-        action: SnackBarAction(
-          label: 'Rückgängig',
-          onPressed: () {
-            if (_undoStack.isEmpty) return;
-            _undoLastChange(showSnack: false);
-          },
+        content: Row(
+          children: [
+            Icon(Icons.swap_vert_rounded, color: p.accent, size: 20),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                message,
+                style: TextStyle(color: p.text, fontWeight: FontWeight.w600),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Material(
+              color: p.accent,
+              borderRadius: BorderRadius.circular(999),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(999),
+                onTap: () {
+                  messenger.hideCurrentSnackBar();
+                  if (_undoStack.isEmpty) return;
+                  _undoLastChange(showSnack: false);
+                },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 7,
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.undo_rounded, size: 16, color: p.bg),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Rückgängig',
+                        style: TextStyle(
+                          color: p.bg,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -6345,6 +6393,22 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
     return (start: start, end: end);
   }
 
+  /// Alle Blöcke, die beim Ziehen von Zeile [laneIndex] mitwandern (zusammenhängende Auswahl).
+  List<TimeBlock> _flexDragChunkForLane(
+    List<TimeBlock> blocks,
+    List<_ClockLane> lanes,
+    int laneIndex,
+  ) {
+    if (!_flexMode || laneIndex < 0 || laneIndex >= lanes.length) return const [];
+    final lane = lanes[laneIndex];
+    if (lane.isGap) return const [];
+    final TimeBlock b = lane.block!;
+    final i = blocks.indexOf(b);
+    if (i < 0) return [b];
+    final r = _flexReorderChunkBounds(blocks, i);
+    return blocks.sublist(r.start, r.end + 1);
+  }
+
   void _clearFlexReorderGhost() {
     if (_flexReorderGhostRange == null) return;
     setState(() => _flexReorderGhostRange = null);
@@ -6681,26 +6745,109 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                       listBottomPad,
                     ),
                     itemCount: dayLanes.length,
-                    onReorder: _flexDayReorderFromLanes,
+                    onReorder: (o, n) {
+                      if (_flexDragHiddenIds.isNotEmpty) {
+                        _flexDragHiddenIds = <String>{};
+                      }
+                      _flexDayReorderFromLanes(o, n);
+                    },
+                    onReorderStart: (i) {
+                      final chunk = _flexDragChunkForLane(blocks, dayLanes, i);
+                      if (chunk.length < 2) return;
+                      final lead = dayLanes[i].block!;
+                      setState(() {
+                        _flexDragHiddenIds = {
+                          for (final b in chunk)
+                            if (b.id != lead.id) b.id,
+                        };
+                      });
+                    },
+                    onReorderEnd: (_) {
+                      if (_flexDragHiddenIds.isEmpty) return;
+                      setState(() => _flexDragHiddenIds = <String>{});
+                    },
                     proxyDecorator:
                         (Widget child, int index, Animation<double> ani) {
                           final a = CurvedAnimation(
                             parent: ani,
                             curve: Curves.easeOutCubic,
                           );
+                          final chunk = _flexDragChunkForLane(
+                            blocks,
+                            dayLanes,
+                            index,
+                          );
+                          final lead = index < dayLanes.length
+                              ? dayLanes[index].block
+                              : null;
+                          final li = lead == null ? -1 : chunk.indexOf(lead);
+                          final before = li > 0
+                              ? chunk.sublist(0, li)
+                              : const <TimeBlock>[];
+                          final after = li >= 0 && li < chunk.length - 1
+                              ? chunk.sublist(li + 1)
+                              : const <TimeBlock>[];
+                          Widget card(TimeBlock b) => Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: IgnorePointer(
+                              child: _blockCard(context, b, true, false),
+                            ),
+                          );
                           return AnimatedBuilder(
                             animation: a,
                             builder: (context, _) {
                               final t = a.value;
-                              return Material(
+                              Widget lifted(Widget w) => Material(
                                 elevation: 8 * t,
                                 shadowColor: Colors.black38,
+                                color: Colors.transparent,
                                 borderRadius: BorderRadius.circular(16),
-                                clipBehavior: Clip.antiAlias,
                                 child: Opacity(
                                   opacity: 0.94 + 0.06 * t,
-                                  child: child,
+                                  child: w,
                                 ),
+                              );
+                              if (before.isEmpty && after.isEmpty) {
+                                return lifted(child);
+                              }
+                              return LayoutBuilder(
+                                builder: (context, c) {
+                                  final h = c.maxHeight;
+                                  return Stack(
+                                    clipBehavior: Clip.none,
+                                    children: [
+                                      if (before.isNotEmpty)
+                                        Positioned(
+                                          left: 0,
+                                          right: 0,
+                                          bottom: h,
+                                          child: lifted(
+                                            Column(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                for (final b in before) card(b),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      Positioned.fill(child: lifted(child)),
+                                      if (after.isNotEmpty)
+                                        Positioned(
+                                          left: 0,
+                                          right: 0,
+                                          top: h,
+                                          child: lifted(
+                                            Column(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                for (final b in after) card(b),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  );
+                                },
                               );
                             },
                           );
@@ -6727,6 +6874,12 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                         );
                       }
                       final block = lane.block!;
+                      if (_flexDragHiddenIds.contains(block.id)) {
+                        return SizedBox(
+                          key: ValueKey<String>(block.id),
+                          height: 0,
+                        );
+                      }
                       final selected = _selectedBlockIds.contains(block.id);
                       final flexSpotlight =
                           flexFocusId != null && block.id == flexFocusId;
@@ -6922,6 +7075,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
     if (selectedCount <= 0) {
       return const SizedBox.shrink();
     }
+    final p = context.palette;
     final sw = MediaQuery.sizeOf(context).width;
     final outer = EdgeInsets.fromLTRB(
       sw < 380 ? 8.0 : 12.0,
@@ -6929,76 +7083,126 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
       sw < 380 ? 8.0 : 12.0,
       0,
     );
-    final innerHoriz = sw < 380 ? 8.0 : 10.0;
-    return Padding(
-      padding: outer,
-      child: Material(
-        color: context.palette.surface,
-        elevation: 0,
-        borderRadius: BorderRadius.circular(20),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: context.palette.hairline),
-            boxShadow: context.palette.cardShadows,
-          ),
-          padding: EdgeInsets.symmetric(horizontal: innerHoriz, vertical: 10),
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                ActionChip(
-                  label: Text(
-                    '$selectedCount',
-                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                      fontWeight: FontWeight.w800,
-                      color: context.palette.text,
+    Widget tool(
+      IconData icon,
+      String label,
+      VoidCallback? onTap, {
+      bool primary = false,
+    }) {
+      final enabled = onTap != null;
+      final fg = !enabled
+          ? p.muted.withValues(alpha: 0.4)
+          : (primary ? p.bg : p.text);
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 3),
+        child: Material(
+          color: primary && enabled
+              ? p.accent
+              : p.hintBg.withValues(alpha: enabled ? 1 : 0.5),
+          borderRadius: BorderRadius.circular(14),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: onTap,
+            child: SizedBox(
+              width: 64,
+              height: 56,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(icon, size: 20, color: fg),
+                  const SizedBox(height: 4),
+                  Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.fade,
+                    softWrap: false,
+                    style: TextStyle(
+                      color: fg,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
-                  onPressed: () {},
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: outer,
+      child: Container(
+        decoration: BoxDecoration(
+          color: p.surface,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: p.hairline),
+          boxShadow: p.cardShadows,
+        ),
+        padding: const EdgeInsets.fromLTRB(10, 8, 7, 8),
+        child: Row(
+          children: [
+            Container(
+              width: 34,
+              height: 34,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: p.accent.withValues(alpha: 0.16),
+                border: Border.all(color: p.accent.withValues(alpha: 0.5)),
+              ),
+              child: Text(
+                '$selectedCount',
+                style: TextStyle(
+                  color: p.accent,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 15,
                 ),
-                const SizedBox(width: 6),
-                ActionChip(
-                  label: const Text('Merge'),
-                  onPressed: selectedCount >= 2 && _canMergeSelection()
-                      ? _mergeSelectedBlocks
-                      : null,
-                ),
-                const SizedBox(width: 6),
-                ActionChip(
-                  label: const Text('+15'),
-                  onPressed: () => _shiftSelectedBlocks(15),
-                ),
-                const SizedBox(width: 6),
-                ActionChip(
-                  label: const Text('−15'),
-                  onPressed: () => _shiftSelectedBlocks(-15),
-                ),
-                if (flexMode) ...[
-                  const SizedBox(width: 6),
-                  Tooltip(
-                    message: 'Um wie viel verschieben — Zeiger drehen',
-                    child: ActionChip(
-                      avatar: const Icon(Icons.schedule_rounded, size: 18),
-                      label: const Text('Verschieben'),
-                      onPressed: () async {
+              ),
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    tool(
+                      Icons.undo_rounded,
+                      'Zurück',
+                      _undoStack.isEmpty ? null : () => _undoLastChange(),
+                      primary: _undoStack.isNotEmpty,
+                    ),
+                    tool(
+                      Icons.keyboard_double_arrow_up_rounded,
+                      '−15 min',
+                      () => _shiftSelectedBlocks(-15),
+                    ),
+                    tool(
+                      Icons.keyboard_double_arrow_down_rounded,
+                      '+15 min',
+                      () => _shiftSelectedBlocks(15),
+                    ),
+                    if (flexMode)
+                      tool(Icons.schedule_rounded, 'Zeit', () async {
                         final d = await showFlexShiftDialSheet(context);
                         if (!context.mounted) return;
                         if (d != null && d != 0) {
                           _shiftSelectedBlocks(d);
                         }
-                      },
+                      }),
+                    tool(
+                      Icons.call_merge_rounded,
+                      'Verbinden',
+                      selectedCount >= 2 && _canMergeSelection()
+                          ? _mergeSelectedBlocks
+                          : null,
                     ),
-                  ),
-                  const SizedBox(width: 6),
-                  ActionChip(
-                    label: const Text('Auswahl lösen'),
-                    onPressed: _clearSelection,
-                  ),
-                ],
-              ],
+                    tool(Icons.close_rounded, 'Lösen', _clearSelection),
+                  ],
+                ),
+              ),
             ),
-          ),
+          ],
         ),
       ),
     );
@@ -9427,13 +9631,17 @@ if (expanded && subTotal > 0) ...[
   }
 
   /// Nach manueller Listen-Reihenfolge neue Start-/Endzeiten setzen, damit Sortierung der Liste konsistent wird.
-  void _repackDayAfterFlexReorder(List<TimeBlock> ordered) {
+  void _repackDayAfterFlexReorder(
+    List<TimeBlock> ordered, {
+    int? startCursor,
+  }) {
     const minDur = 15;
     if (ordered.isEmpty) return;
 
-    var cursor = ordered
-        .map((e) => e.startMin)
-        .fold<int>(ordered.first.startMin, (a, b) => a < b ? a : b)
+    var cursor = (startCursor ??
+            ordered
+                .map((e) => e.startMin)
+                .fold<int>(ordered.first.startMin, (a, b) => a < b ? a : b))
         .clamp(0, 1439);
 
     for (final b in ordered) {
@@ -9501,9 +9709,9 @@ if (expanded && subTotal > 0) ...[
     for (var i = 0; i < oldIndex; i++) {
       if (!lanes[i].isGap) n++;
     }
+    // newIndex = „vor Zeile newIndex der unveränderten Liste“ → Blöcke davor zählen.
     var dest = 0;
-    final insertAt = newIndex > oldIndex ? newIndex - 1 : newIndex;
-    for (var i = 0; i < insertAt && i < lanes.length; i++) {
+    for (var i = 0; i < newIndex && i < lanes.length; i++) {
       if (!lanes[i].isGap) dest++;
     }
     _flexDayReorderBlocks(n, dest);
@@ -9540,19 +9748,26 @@ if (expanded && subTotal > 0) ...[
     _recordUndoSnapshot();
     setState(() {
       _flexReorderGhostRange = null;
-      final chunk = list.sublist(start, end + 1);
-      list.removeRange(start, end + 1);
-
-      var dest = _flexChunkInsertDestAfterRemovingChunk(
+      final dest0 = _flexChunkInsertDestAfterRemovingChunk(
         newIndex: newIndex,
         chunkStart: start,
         chunkLen: k,
+      ).clamp(0, list.length - k);
+      // Nur der Bereich zwischen alter und neuer Stelle ändert sich
+      // (z. B. Block 2+3 hinter Block 4: Block 4 startet, wo Block 2 war).
+      final lo = start < dest0 ? start : dest0;
+      final hi = end > dest0 + k - 1 ? end : dest0 + k - 1;
+      var spanStart = list[lo].startMin;
+      for (var i = lo; i <= hi; i++) {
+        if (list[i].startMin < spanStart) spanStart = list[i].startMin;
+      }
+      final chunk = list.sublist(start, end + 1);
+      list.removeRange(start, end + 1);
+      list.insertAll(dest0, chunk);
+      _repackDayAfterFlexReorder(
+        list.sublist(lo, hi + 1),
+        startCursor: spanStart,
       );
-      if (dest < 0) dest = 0;
-      if (dest > list.length) dest = list.length;
-      list.insertAll(dest, chunk);
-
-      _repackDayAfterFlexReorder(list);
       _sortBlocksChronologically(list);
       _repairUnpinnedLinearOverlaps(list);
       _repairOverlapsWithPins(list);
@@ -9563,9 +9778,7 @@ if (expanded && subTotal > 0) ...[
     });
     _flushPersistDayPlans();
     _offerUndoSnack(
-      k > 1
-          ? 'Mehrere Blöcke neu geordnet – oben oder hier rückgängig.'
-          : 'Reihenfolge geändert – oben oder hier rückgängig.',
+      k > 1 ? '$k Blöcke verschoben' : 'Block verschoben',
     );
   }
 
