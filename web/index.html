@@ -35,7 +35,8 @@
   <meta name="theme-color" content="#121212">
   <style>
     html,body{background:#121212;margin:0;height:100%;overflow:hidden;overscroll-behavior:none}
-    body{position:fixed;inset:0;touch-action:manipulation}
+    body{touch-action:manipulation}
+    @media (display-mode: standalone){#flutter_host{bottom:auto;height:100vh;height:100lvh}}
     #flutter_host{position:fixed;inset:0}
   </style>
   <link rel="manifest" href="manifest.json">
