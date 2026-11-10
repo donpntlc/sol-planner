@@ -1007,6 +1007,63 @@ const String kMorningRoutineNotes = """## Ablauf
 • Immunsystem – regelmäßige Kältereize können es leicht stimulieren
 • Willenskraft – die Überwindung am Morgen trainiert Disziplin""";
 
+/// Deans Texte für die übrigen Preset-Blöcke (aus seinem alten Plan übernommen).
+/// Schlüssel = Blocktitel klein, ohne Satzzeichen.
+const Map<String, String> kPresetBlockNotes = {
+  'gym steps calisthenics skill': """## Training
+• Workout
+• 15–45 min Stairmaster (Zone 2)
+
+## Restday
+• Mind. 60 min Steps sammeln + Podcast (geht auch ohne)""",
+  'shower post workout': """## Ablauf
+• Elektrolyte
+• Magerquark aus dem TK in den Kühlschrank
+
+## Warme Dusche = Entspannung & Recovery
+• Muskeln – entspannen sich
+• Recovery – indirekt hilfreich für Muskelaufbau
+• Stress – Cortisol runter
+• Schlaf – oft besser (wenn abends)""",
+  'trading cash open': """## Vorher: kurze Pause + Snack
+• 2x Black Tea (2 Beutel je Tasse) – 50–150 mg Koffein, ideal für stabile Konzentration (nur wenn nötig)
+• Snack – z. B. Magerquark-Shake + einfache Carbs
+• Makros – Carbs 10–15 % / 20–30 g · Protein 15–25 % / 30–50 g · Fett 20–30 % / 12–18 g
+• Etwas Bewegung, an die frische Luft
+
+## Marktanalyse
+• Heutigen Tag auswerten, Erwartungen mit Screenshot ins Trading Journal
+
+## Cash Open
+• Backtesting / Trading""",
+  'main meal': """• Rest in Snacks
+• An guten Tagen noch 30 min Verdauungsspaziergang""",
+  'deep work 2': """## Aktueller Fokus
+• Trading Content (seit April ’26)""",
+  'creative time': """## Ideen
+• Sprache lernen
+• Bible Study
+• Buch lesen
+• Instrumente
+• Anti-Prokrastinations-Liste
+• Andere Tasks abschließen
+• Am Projekt arbeiten
+• Podcast + Steps""",
+  'evening meal': """• Best Case: ½ Magerquark-Protein-Shake""",
+  'abendroutine': """## Vor dem Schlafen
+• 15 min Bibel
+• Wohnung ordentlich hinterlassen
+• Klamotten für morgen rauslegen""",
+  'go to bed': """• 6 h Schlaf = top
+• Ab 23:15 ins Bett, ab 23:30 schlafen""",
+};
+
+String _presetNotesKey(String t) => t
+    .toLowerCase()
+    .replaceAll(RegExp(r"[^a-z0-9äöüß ]"), ' ')
+    .replaceAll(RegExp(r'\s+'), ' ')
+    .trim();
+
 bool _isMorningRoutineTitle(String t) {
   final x = t.toLowerCase().replaceAll('-', ' ');
   return x.contains('morgen routine') || x.contains('morgenroutine');
@@ -5512,7 +5569,11 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
 
   /// Morgenroutine ohne eigene Notizen/Checkliste bekommt Deans Standard-Inhalt.
   TimeBlock _enrichMorningRoutine(TimeBlock b) {
-    if (!_isMorningRoutineTitle(b.title)) return b;
+    if (!_isMorningRoutineTitle(b.title)) {
+      final txt = kPresetBlockNotes[_presetNotesKey(b.title)];
+      if (txt != null && b.notes.trim().isEmpty) b.notes = txt;
+      return b;
+    }
     // Frühere automatische Checkliste wieder entfernen.
     if (b.subtasks.isNotEmpty &&
         b.subtasks.every((x) => _kOldMorningChecklist.contains(x.title))) {
