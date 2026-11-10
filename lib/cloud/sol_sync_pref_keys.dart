@@ -20,5 +20,7 @@ const List<String> kSolSyncedPlannerStringPrefKeys = [
   'planner_subtask_quick_presets_v1',
   'planner_builtin_preset_display_names_v1',
   'planner_project_rotation_v1',
+  'planner_macro_plan_v1',
+  'planner_macro_meal_by_title_v1',
   kPlannerReminderPrefsKeySync,
 ];

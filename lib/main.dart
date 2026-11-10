@@ -17,6 +17,7 @@ import 'package:sol/planner_reminder_prefs.dart';
 import 'package:sol/project_rotation.dart';
 import 'package:sol/web_safe_area.dart';
 import 'package:sol/calendar_export.dart';
+import 'package:sol/macro_plan.dart';
 import 'package:sol/reminder_prefs_sheet.dart';
 import 'package:sol/widgets/block_session_live_strip.dart';
 import 'package:sol/widgets/current_task/current_task_package.dart';
@@ -1938,6 +1939,9 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
   /// Projekt-Rotation für „Projekt-Session“-Blöcke.
   ProjectRotation _projectRotation = ProjectRotation();
 
+  /// Makroplan aus PREPIT (Import im ⋯-Menü).
+  MacroPlan _macroPlan = MacroPlan();
+
   /// Raster-Ansicht (Zeitraster) statt Liste.
   bool _dayGridView = false;
   final ScrollController _gridScroll = ScrollController();
@@ -3024,6 +3028,14 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
         onTap: _openProjectRotationSheet,
       ),
       (
+        icon: Icons.restaurant_menu_rounded,
+        label: 'Makroplan importieren',
+        sub: _macroPlan.isEmpty
+            ? 'Aus PREPIT: Einstellungen → Makroplan exportieren'
+            : 'Stand ${_macroPlan.created == null ? '–' : '${_macroPlan.created!.day}.${_macroPlan.created!.month}.'} · ${_macroPlan.meals.length} Mahlzeiten',
+        onTap: _importMacroPlan,
+      ),
+      (
         icon: Icons.checklist_rounded,
         label: 'To-do-Liste (Deep Work)',
         sub: null,
@@ -3120,7 +3132,15 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                           Icons.chevron_right_rounded,
                           color: p.muted,
                         ),
-                        onTap: () => Navigator.pop(sheetCtx, it.onTap),
+                        onTap: () {
+                          if (it.label == 'Makroplan importieren') {
+                            // Dateiauswahl muss direkt im Tipp starten.
+                            it.onTap();
+                            Navigator.pop(sheetCtx);
+                            return;
+                          }
+                          Navigator.pop(sheetCtx, it.onTap);
+                        },
                       ),
                   ],
                 ),
@@ -3131,6 +3151,47 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
       },
     );
     if (picked != null && mounted) picked();
+  }
+
+  // ─── Makroplan aus PREPIT ─────────────────────────────────────────────────
+
+  Future<void> _loadMacroPlan() async {
+    final m = await MacroPlan.load();
+    if (!mounted) return;
+    setState(() => _macroPlan = m);
+  }
+
+  /// Muss direkt im Tipp starten (Dateiauswahl auf dem iPhone).
+  Future<void> _importMacroPlan() async {
+    final text = await pickJsonFileText();
+    if (text == null || !mounted) return;
+    try {
+      final plan = MacroPlan.parseExport(
+        text,
+        keepMapping: _macroPlan.mealByTitle,
+      );
+      setState(() => _macroPlan = plan);
+      await _macroPlan.save();
+      solNotifyPlannerDiskDataChanged();
+      if (!mounted) return;
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        SnackBar(
+          content: Text(
+            'Makroplan übernommen: ${plan.meals.length} Mahlzeiten. '
+            'Öffne einen Mahlzeit-Block, um die Makros zu sehen.',
+          ),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Das ist keine Makroplan-Datei. In PREPIT: Einstellungen → Makroplan exportieren.',
+          ),
+        ),
+      );
+    }
   }
 
   // ─── Raster-Ansicht (Zeitraster wie im Kalender) ───────────────────────────
@@ -4948,6 +5009,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
     Future<void>.microtask(_loadReminderPrefs);
     Future<void>.microtask(_loadDeepWorkTodos);
     Future<void>.microtask(_loadProjectRotation);
+    Future<void>.microtask(_loadMacroPlan);
     Future<void>.microtask(_loadDayGridView);
     Future<void>.microtask(_loadShowFreeTimeLanes);
     Future<void>.microtask(_loadActivePresetKey);
@@ -10213,6 +10275,128 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
               );
             }
 
+            Widget macroSection() {
+              final title = titleCtrl.text;
+              final cur = _macroPlan.mealFor(title);
+              Widget row(String label, String value) => Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 72,
+                      child: Text(
+                        label,
+                        style: TextStyle(
+                          color: p.text,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: Text(
+                        value,
+                        style: TextStyle(
+                          color: p.muted,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+              return Container(
+                padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
+                decoration: BoxDecoration(
+                  color: p.surface,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: p.hairline),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Makros',
+                                style: TextStyle(
+                                  color: p.text,
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 15.5,
+                                ),
+                              ),
+                              const SizedBox(height: 5),
+                              Container(
+                                width: 28,
+                                height: 2.5,
+                                decoration: BoxDecoration(
+                                  color: p.accent,
+                                  borderRadius: BorderRadius.circular(2),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        PopupMenuButton<String>(
+                          color: p.surface,
+                          tooltip: 'Mahlzeit wählen',
+                          onSelected: (v) {
+                            _macroPlan.setMeal(title, v.isEmpty ? null : v);
+                            unawaited(_macroPlan.save());
+                            solNotifyPlannerDiskDataChanged();
+                            setSheet(() {});
+                            if (mounted) setState(() {});
+                          },
+                          itemBuilder: (c) => [
+                            const PopupMenuItem(value: '', child: Text('Keine')),
+                            for (final m in _macroPlan.meals)
+                              PopupMenuItem(value: m.id, child: Text(m.name)),
+                          ],
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 6,
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  cur?.name ?? 'Mahlzeit wählen',
+                                  style: TextStyle(
+                                    color: p.accent,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                Icon(
+                                  Icons.expand_more_rounded,
+                                  color: p.accent,
+                                  size: 20,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    if (cur != null) ...[
+                      row('Carbs', cur.carbs.label),
+                      row('Protein', cur.protein.label),
+                      row('Fett', cur.fat.label),
+                      if (cur.kcalMax > 0) row('kcal', cur.kcalLabel),
+                    ] else
+                      Text(
+                        'Wähle die Mahlzeit, dann stehen hier deine Makros aus PREPIT.',
+                        style: TextStyle(color: p.muted, height: 1.35),
+                      ),
+                  ],
+                ),
+              );
+            }
+
             Widget infoRow({
               required IconData icon,
               required String title,
@@ -11230,6 +11414,11 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                                     ),
                                   ),
                                 ),
+                                if (!_macroPlan.isEmpty &&
+                                    titleCtrl.text.trim().isNotEmpty) ...[
+                                  const SizedBox(height: 14),
+                                  macroSection(),
+                                ],
                                 const SizedBox(height: 14),
                                 Container(
                                   decoration: BoxDecoration(
