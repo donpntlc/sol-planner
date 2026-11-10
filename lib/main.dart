@@ -9748,6 +9748,45 @@ if (expanded && subTotal > 0) ...[
 
   /// Nimmt zwei unfixierte lineare Slots, die sich zeitlich überschneiden —
   /// schiebt den späteren Listen-Eintrag hinter das Ende des vorigen (Datenbasis).
+  /// Neuer/geänderter Block behält seine Zeit; was sich überschneidet, rutscht dahinter
+  /// (Blöcke davor werden gekürzt, wenn sie in ihn hineinragen).
+  void _makeRoomForBlock(List<TimeBlock> day, TimeBlock a) {
+    const minDur = 15;
+    if (a.allDay || !a.isLinearSlot || a.isOvernightSlot) return;
+    bool movable(TimeBlock b) =>
+        !identical(b, a) &&
+        !b.allDay &&
+        b.isLinearSlot &&
+        !b.isOvernightSlot &&
+        !b.pinned;
+    for (final b in day) {
+      if (!movable(b)) continue;
+      if (b.startMin < a.startMin && b.endMin > a.startMin) {
+        if (a.startMin - b.startMin >= minDur) {
+          b.endMin = a.startMin;
+        } else {
+          final d = b.duration;
+          b.startMin = a.endMin;
+          b.endMin = (a.endMin + d).clamp(0, 1440);
+        }
+      }
+    }
+    final later = day
+        .where((b) => movable(b) && b.startMin >= a.startMin)
+        .toList()
+      ..sort((x, y) => x.startMin.compareTo(y.startMin));
+    var cursor = a.endMin;
+    for (final b in later) {
+      if (b.startMin >= cursor) break;
+      if (cursor >= 1440) break;
+      final d = b.duration < minDur ? minDur : b.duration;
+      b.startMin = cursor;
+      b.endMin = (cursor + d).clamp(0, 1440);
+      cursor = b.endMin;
+    }
+    _sortBlocksChronologically(day);
+  }
+
   void _repairUnpinnedLinearOverlaps(List<TimeBlock> day) {
     const minDur = 15;
     if (day.length < 2) return;
@@ -10437,9 +10476,10 @@ if (expanded && subTotal > 0) ...[
 
       _recordUndoSnapshot();
       setState(() {
+        TimeBlock? anchorBlock = editing;
         if (editing == null) {
           _getBlocksForDay(_selectedDate).add(
-            _newBlock(
+            anchorBlock = _newBlock(
               title,
               sm,
               em,
@@ -10484,7 +10524,9 @@ if (expanded && subTotal > 0) ...[
                 stealFromBlock.startMin + stealFromNextMin;
           }
         }
-        final dayFinal = _getBlocksForDay(_selectedDate);
+        _ensureDayExists(_selectedDate);
+        final dayFinal = _days[_onlyDay(_selectedDate)]!;
+        if (anchorBlock != null) _makeRoomForBlock(dayFinal, anchorBlock);
         _repairOverlapsWithPins(dayFinal);
         _repairUnpinnedLinearOverlaps(dayFinal);
         _repairOverlapsWithPins(dayFinal);
