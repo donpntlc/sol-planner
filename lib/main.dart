@@ -8771,17 +8771,40 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                                                   ],
                                                 ),
                                               if (block.notes.trim().isNotEmpty)
-                                                Icon(
-                                                  Icons.notes_rounded,
-                                                  size: 15,
-                                                  color: activeLiveForeground
-                                                      ? liveInk
-                                                      : p.muted.withValues(
-                                                          alpha: 0.85,
+                                                InkWell(
+                                                  onTap: () => setState(() {
+                                                    if (!_expandedBlockIds
+                                                        .remove(block.id)) {
+                                                      _expandedBlockIds.add(
+                                                        block.id,
+                                                      );
+                                                    }
+                                                  }),
+                                                  borderRadius:
+                                                      BorderRadius.circular(10),
+                                                  child: Padding(
+                                                    padding:
+                                                        const EdgeInsets.symmetric(
+                                                          horizontal: 8,
+                                                          vertical: 6,
                                                         ),
+                                                    child: Icon(
+                                                      Icons.notes_rounded,
+                                                      size: 17,
+                                                      color:
+                                                          activeLiveForeground
+                                                          ? liveInk
+                                                          : expanded
+                                                          ? p.accent
+                                                          : p.muted.withValues(
+                                                              alpha: 0.85,
+                                                            ),
+                                                    ),
+                                                  ),
                                                 ),
                                               if (subTotal > 0 ||
-                                                  deepTodoCount > 0)
+                                                  deepTodoCount > 0 ||
+                                                  block.notes.trim().isNotEmpty)
                                                 InkWell(
                                                   onTap: () {
                                                     setState(() {
@@ -8975,6 +8998,30 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                                                     ),
                                                   ),
                                                 ),
+                                          ],
+                                          if (expanded &&
+                                              block.notes.trim().isNotEmpty) ...[
+                                            const SizedBox(height: 10),
+                                            Container(
+                                              width: double.infinity,
+                                              padding: const EdgeInsets.fromLTRB(
+                                                12,
+                                                10,
+                                                12,
+                                                4,
+                                              ),
+                                              decoration: BoxDecoration(
+                                                color: p.bg.withValues(
+                                                  alpha: 0.35,
+                                                ),
+                                                borderRadius:
+                                                    BorderRadius.circular(14),
+                                              ),
+                                              child: _formattedNotes(
+                                                context,
+                                                block.notes,
+                                              ),
+                                            ),
                                           ],
                                         ],
                                       ),
