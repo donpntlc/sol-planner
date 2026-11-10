@@ -196,6 +196,14 @@ class MacroPlan {
 
   MacroSplit? splitFor(String mealId) => splits[mealId];
 
+  /// Prozent zu Gramm im Verhältnis der PREPIT-Werte dieser Mahlzeit.
+  static int _pct(MacroRange r, int grams) {
+    if (grams <= 0) return 0;
+    if (r.maxG > 0) return (grams * r.maxPct / r.maxG).round();
+    if (r.minG > 0) return (grams * r.minPct / r.minG).round();
+    return 0;
+  }
+
   void setSplit(String mealId, MacroSplit? split) {
     if (split == null) {
       splits.remove(mealId);
@@ -221,13 +229,14 @@ class MacroPlan {
       );
     }
     if (_key(sp.title) == _key(title)) {
-      String g(int v) => v <= 0 ? '–' : '$v g';
+      String g(MacroRange r, int v) =>
+          v <= 0 ? '0 % / 0 g' : '${_pct(r, v)} % / $v g';
       return BlockMacros(
         meal: m,
         share: MacroShare.part,
-        carbs: g(sp.carbs),
-        protein: g(sp.protein),
-        fat: g(sp.fat),
+        carbs: g(m.carbs, sp.carbs),
+        protein: g(m.protein, sp.protein),
+        fat: g(m.fat, sp.fat),
         kcalMin: sp.kcal,
         kcalMax: sp.kcal,
         split: sp,
@@ -236,8 +245,8 @@ class MacroPlan {
     String rest(MacroRange r, int used) {
       final a = (r.minG - used).clamp(0, 9999);
       final b = (r.maxG - used).clamp(0, 9999);
-      if (b <= 0) return '–';
-      return a == b ? '$a g' : '$a–$b g';
+      String r2(int x, int y) => x == y ? '$x' : '$x–$y';
+      return '${r2(_pct(r, a), _pct(r, b))} % / ${r2(a, b)} g';
     }
     return BlockMacros(
       meal: m,
