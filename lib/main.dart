@@ -975,12 +975,12 @@ List<PresetTaskLine> builtinHustle530Lines() => [
       PresetTaskLine(
         title: 'Morgen Routine',
         startMin: 330,
-        endMin: 390,
+        endMin: 420,
         colorLabel: 'Routine',
       ),
       PresetTaskLine(
         title: 'Deep Work',
-        startMin: 390,
+        startMin: 420,
         endMin: 540,
         colorLabel: 'Fokus',
       ),
@@ -5180,6 +5180,30 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
           }
         }
       });
+      // Einmalig (10.11.): im 5:30-Preset Morgen Routine 5:30–7:00, Deep Work 7:00–9:00.
+      const migKey = 'planner_mig_530_morning_v1';
+      if (prefs.getBool(migKey) != true) {
+        final l = _presetTaskOverrides[PlannerPresetType.hustle530];
+        if (l != null) {
+          var changed = false;
+          for (var i = 0; i < l.length; i++) {
+            final x = l[i];
+            if (x.title == 'Morgen Routine' &&
+                x.startMin == 330 &&
+                x.endMin == 390) {
+              l[i] = x.copyWith(endMin: 420);
+              changed = true;
+            } else if (x.title == 'Deep Work' &&
+                x.startMin == 390 &&
+                x.endMin == 540) {
+              l[i] = x.copyWith(startMin: 420);
+              changed = true;
+            }
+          }
+          if (changed) await _savePresetTaskOverrides();
+        }
+        await prefs.setBool(migKey, true);
+      }
     } catch (_) {}
   }
 
