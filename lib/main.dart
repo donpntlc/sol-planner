@@ -6859,99 +6859,25 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                               if (before.isEmpty && after.isEmpty) {
                                 return lifted(child);
                               }
-                              if (_kFlexProxyTest == '1') {
-                                return Stack(
-                                  fit: StackFit.expand,
-                                  clipBehavior: Clip.none,
-                                  children: [lifted(child)],
-                                );
-                              }
-                              if (_kFlexProxyTest == '2') {
-                                return Column(
-                                  children: [
-                                    for (final b in after) card(b),
-                                  ],
-                                );
-                              }
-                              if (_kFlexProxyTest == '5') {
-                                return Column(
-                                  children: [Expanded(child: lifted(child))],
-                                );
-                              }
-                              if (_kFlexProxyTest == '6') {
-                                return OverflowBox(
-                                  alignment: Alignment.topCenter,
-                                  minHeight: 0,
-                                  maxHeight: double.infinity,
+                              const miniH = 56.0;
+                              return LayoutBuilder(
+                                builder: (context, c) => Transform.translate(
+                                  offset: Offset(0, -miniH * before.length),
                                   child: Column(
-                                    mainAxisSize: MainAxisSize.min,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
                                     children: [
-                                      lifted(child),
-                                      for (final b in after) card(b),
+                                      for (final b in before)
+                                        SizedBox(height: miniH, child: card(b)),
+                                      SizedBox(
+                                        height: c.maxHeight,
+                                        child: lifted(child),
+                                      ),
+                                      for (final b in after)
+                                        SizedBox(height: miniH, child: card(b)),
                                     ],
                                   ),
-                                );
-                              }
-                              if (_kFlexProxyTest == '7') {
-                                return lifted(
-                                  Stack(
-                                    fit: StackFit.expand,
-                                    clipBehavior: Clip.none,
-                                    children: [child],
-                                  ),
-                                );
-                              }
-                              if (_kFlexProxyTest == '4') {
-                                return Stack(
-                                  fit: StackFit.expand,
-                                  clipBehavior: Clip.none,
-                                  children: [
-                                    lifted(child),
-                                    Positioned(
-                                      left: 0,
-                                      right: 0,
-                                      bottom: 0,
-                                      child: card(after.first),
-                                    ),
-                                  ],
-                                );
-                              }
-                              return Stack(
-                                fit: StackFit.expand,
-                                clipBehavior: Clip.none,
-                                children: [
-                                  lifted(child),
-                                  if (before.isNotEmpty)
-                                    OverflowBox(
-                                      alignment: Alignment.topCenter,
-                                      minHeight: 0,
-                                      maxHeight: double.infinity,
-                                      child: FractionalTranslation(
-                                        translation: const Offset(0, -1),
-                                        child: Column(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            for (final b in before) card(b),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  if (after.isNotEmpty)
-                                    OverflowBox(
-                                      alignment: Alignment.bottomCenter,
-                                      minHeight: 0,
-                                      maxHeight: double.infinity,
-                                      child: FractionalTranslation(
-                                        translation: const Offset(0, 1),
-                                        child: Column(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            for (final b in after) card(b),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                ],
+                                ),
                               );
                             },
                           );
@@ -15253,8 +15179,6 @@ class _BacklogQuickComposerState extends State<_BacklogQuickComposer> {
     );
   }
 }
-
-final String _kFlexProxyTest = Uri.base.queryParameters['pt'] ?? '';
 
 String _fmtDurationShort(int m) {
   if (m < 60) return '$m min';
