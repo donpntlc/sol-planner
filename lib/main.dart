@@ -6873,6 +6873,34 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                                   ],
                                 );
                               }
+                              if (_kFlexProxyTest == '5') {
+                                return Column(
+                                  children: [Expanded(child: lifted(child))],
+                                );
+                              }
+                              if (_kFlexProxyTest == '6') {
+                                return OverflowBox(
+                                  alignment: Alignment.topCenter,
+                                  minHeight: 0,
+                                  maxHeight: double.infinity,
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      lifted(child),
+                                      for (final b in after) card(b),
+                                    ],
+                                  ),
+                                );
+                              }
+                              if (_kFlexProxyTest == '7') {
+                                return lifted(
+                                  Stack(
+                                    fit: StackFit.expand,
+                                    clipBehavior: Clip.none,
+                                    children: [child],
+                                  ),
+                                );
+                              }
                               if (_kFlexProxyTest == '4') {
                                 return Stack(
                                   fit: StackFit.expand,
