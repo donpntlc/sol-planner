@@ -970,6 +970,33 @@ List<PresetTaskLine> shiftPresetLines(List<PresetTaskLine> lines, int delta) {
   }).toList();
 }
 
+/// Deans Morgenroutine: Schritte als abhakbare Checkliste, Hintergrund als Notiz.
+const List<String> kMorningRoutineChecklist = [
+  'Beten',
+  'Bett machen',
+  'WC',
+  'Wasser + Creatin',
+  '50–100 Push-ups oder 30 min Cardio/Steps',
+  'Eisdusche',
+  'Bible Study 30–60 min (an verplanten Tagen 1 h)',
+  'Skin Care',
+  'Protein-Shake',
+  'Kalender checken',
+];
+
+const String kMorningRoutineNotes = """Warum Eisdusche?
+
+• Wach & Energie – kaltes Wasser aktiviert das Nervensystem, Adrenalin steigt: wacher als mit Kaffee.
+• Stimmung – fördert Endorphine, weniger Stress, bessere Laune.
+• Kreislauf – Gefäße ziehen sich zusammen und weiten sich wieder, die Durchblutung wird angeregt.
+• Immunsystem – regelmäßige Kältereize können es leicht stimulieren.
+• Willenskraft – die Überwindung am Morgen trainiert Disziplin.""";
+
+bool _isMorningRoutineTitle(String t) {
+  final x = t.toLowerCase().replaceAll('-', ' ');
+  return x.contains('morgen routine') || x.contains('morgenroutine');
+}
+
 /// Variant von [PlannerPresetType.hustle]: Wecken 05:30, späterer Abend, Schlaffenster bis 05:30.
 List<PresetTaskLine> builtinHustle530Lines() => [
       PresetTaskLine(
@@ -4433,6 +4460,11 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
           } catch (_) {}
         }
         if (bl.isNotEmpty && blocks.isEmpty) continue;
+        if (!day.isBefore(_onlyDay(DateTime.now()))) {
+          for (final b in blocks) {
+            _enrichMorningRoutine(b);
+          }
+        }
         parsedDays[day] = blocks;
         parsedKinds[day] = pk;
       }
@@ -5235,14 +5267,28 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
   }
 
   TimeBlock _blockFromPresetLine(PresetTaskLine line) {
-    return _newBlock(
-      line.title.isEmpty ? 'Block' : line.title,
-      line.startMin,
-      line.endMin,
-      _normalizePresetCategoryLabel(line.colorLabel),
-      '',
-      notes: line.notes,
+    return _enrichMorningRoutine(
+      _newBlock(
+        line.title.isEmpty ? 'Block' : line.title,
+        line.startMin,
+        line.endMin,
+        _normalizePresetCategoryLabel(line.colorLabel),
+        '',
+        notes: line.notes,
+      ),
     );
+  }
+
+  /// Morgenroutine ohne eigene Notizen/Checkliste bekommt Deans Standard-Inhalt.
+  TimeBlock _enrichMorningRoutine(TimeBlock b) {
+    if (!_isMorningRoutineTitle(b.title)) return b;
+    if (b.notes.trim().isEmpty) b.notes = kMorningRoutineNotes;
+    if (b.subtasks.isEmpty) {
+      for (final t in kMorningRoutineChecklist) {
+        b.subtasks.add(BlockSubtask(id: _nextId(), title: t));
+      }
+    }
+    return b;
   }
 
   /// Vorlagenzeilen ab [cutOffMin]: erste Zeile wird bei Bedarf bei [cutOffMin] angeschnitten
