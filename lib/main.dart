@@ -6859,7 +6859,35 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                               if (before.isEmpty && after.isEmpty) {
                                 return lifted(child);
                               }
-                              if (_kFlexProxyTest) return lifted(child);
+                              if (_kFlexProxyTest == '1') {
+                                return Stack(
+                                  fit: StackFit.expand,
+                                  clipBehavior: Clip.none,
+                                  children: [lifted(child)],
+                                );
+                              }
+                              if (_kFlexProxyTest == '2') {
+                                return Column(
+                                  children: [
+                                    for (final b in after) card(b),
+                                  ],
+                                );
+                              }
+                              if (_kFlexProxyTest == '4') {
+                                return Stack(
+                                  fit: StackFit.expand,
+                                  clipBehavior: Clip.none,
+                                  children: [
+                                    lifted(child),
+                                    Positioned(
+                                      left: 0,
+                                      right: 0,
+                                      bottom: 0,
+                                      child: card(after.first),
+                                    ),
+                                  ],
+                                );
+                              }
                               return Stack(
                                 fit: StackFit.expand,
                                 clipBehavior: Clip.none,
@@ -15198,7 +15226,7 @@ class _BacklogQuickComposerState extends State<_BacklogQuickComposer> {
   }
 }
 
-const bool _kFlexProxyTest = true;
+final String _kFlexProxyTest = Uri.base.queryParameters['pt'] ?? '';
 
 String _fmtDurationShort(int m) {
   if (m < 60) return '$m min';
