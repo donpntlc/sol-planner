@@ -3392,6 +3392,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
       final plan = MacroPlan.parseExport(
         text,
         keepMapping: _macroPlan.mealByTitle,
+        keepSplits: _macroPlan.splits,
       );
       setState(() => _macroPlan = plan);
       await _macroPlan.save();
@@ -10556,6 +10557,106 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
             Widget macroSection() {
               final title = titleCtrl.text;
               final cur = _macroPlan.mealFor(title);
+              final bm = _macroPlan.blockMacros(title);
+              Future<void> editSplit(MealMacros meal) async {
+                final old = _macroPlan.splitFor(meal.id);
+                final ownPart =
+                    old == null ||
+                    old.title.trim().toLowerCase() ==
+                        title.trim().toLowerCase();
+                final pc = TextEditingController(
+                  text: '${ownPart ? (old?.protein ?? 30) : 30}',
+                );
+                final cc = TextEditingController(
+                  text: '${ownPart ? (old?.carbs ?? 0) : 0}',
+                );
+                final fc = TextEditingController(
+                  text: '${ownPart ? (old?.fat ?? 0) : 0}',
+                );
+                Widget field(String label, TextEditingController c) =>
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: TextField(
+                        controller: c,
+                        keyboardType: TextInputType.number,
+                        style: TextStyle(color: p.text),
+                        decoration: InputDecoration(
+                          labelText: label,
+                          suffixText: 'g',
+                          isDense: true,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                    );
+                final res = await showDialog<String>(
+                  context: context,
+                  builder: (dc) => AlertDialog(
+                    backgroundColor: p.surface,
+                    title: Text(
+                      '${meal.name} aufteilen',
+                      style: TextStyle(
+                        color: p.text,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    content: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          'So viel isst du schon in „${title.trim()}“. '
+                          'Der Rest steht automatisch im anderen ${meal.name}-Block.',
+                          style: TextStyle(color: p.muted, height: 1.35),
+                        ),
+                        const SizedBox(height: 14),
+                        field('Protein', pc),
+                        field('Carbs', cc),
+                        field('Fett', fc),
+                      ],
+                    ),
+                    actions: [
+                      if (old != null)
+                        TextButton(
+                          onPressed: () => Navigator.pop(dc, 'del'),
+                          child: const Text('Aufteilung entfernen'),
+                        ),
+                      TextButton(
+                        onPressed: () => Navigator.pop(dc),
+                        child: const Text('Abbrechen'),
+                      ),
+                      FilledButton(
+                        onPressed: () => Navigator.pop(dc, 'ok'),
+                        child: const Text('Speichern'),
+                      ),
+                    ],
+                  ),
+                );
+                if (res == null) return;
+                int n(TextEditingController c) =>
+                    int.tryParse(c.text.trim()) ?? 0;
+                if (res == 'del' ||
+                    (n(pc) <= 0 && n(cc) <= 0 && n(fc) <= 0)) {
+                  _macroPlan.setSplit(meal.id, null);
+                } else {
+                  _macroPlan.setMeal(title, meal.id);
+                  _macroPlan.setSplit(
+                    meal.id,
+                    MacroSplit(
+                      title: title.trim(),
+                      protein: n(pc),
+                      carbs: n(cc),
+                      fat: n(fc),
+                    ),
+                  );
+                }
+                await _macroPlan.save();
+                solNotifyPlannerDiskDataChanged();
+                setSheet(() {});
+                if (mounted) setState(() {});
+              }
+
               Widget row(String label, String value) => Padding(
                 padding: const EdgeInsets.only(bottom: 6),
                 child: Row(
@@ -10660,57 +10761,95 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                       ],
                     ),
                     const SizedBox(height: 10),
-                    if (cur != null) ...[
-                      row('Carbs', cur.carbs.label),
-                      row('Protein', cur.protein.label),
-                      row('Fett', cur.fat.label),
-                      if (cur.kcalMax > 0) ...[
-                        const SizedBox(height: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 7,
-                          ),
-                          decoration: BoxDecoration(
-                            color: p.accent.withValues(alpha: 0.14),
-                            borderRadius: BorderRadius.circular(999),
-                            border: Border.all(
-                              color: p.accent.withValues(alpha: 0.45),
+                    if (cur != null && bm != null) ...[
+                      if (bm.share != MacroShare.full)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: Text(
+                            bm.share == MacroShare.part
+                                ? 'Dein Teil von ${cur.name} – der Rest steht im anderen Block.'
+                                : 'Rest – ${bm.split!.shortLabel} schon bei „${bm.split!.title}“.',
+                            style: TextStyle(
+                              color: p.accent,
+                              fontSize: 12.5,
+                              height: 1.35,
                             ),
                           ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.local_fire_department_rounded,
-                                size: 17,
-                                color: p.accent,
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                cur.kcalMin == cur.kcalMax
-                                    ? '${cur.kcalMin}'
-                                    : '${cur.kcalMin}–${cur.kcalMax}',
-                                style: TextStyle(
-                                  color: p.text,
-                                  fontWeight: FontWeight.w800,
-                                  fontFeatures: const [
-                                    FontFeature.tabularFigures(),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                'kcal',
-                                style: TextStyle(
-                                  color: p.muted,
-                                  fontSize: 12.5,
-                                ),
-                              ),
-                            ],
-                          ),
                         ),
-                      ],
+                      row('Carbs', bm.carbs),
+                      row('Protein', bm.protein),
+                      row('Fett', bm.fat),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          if (bm.kcalMax > 0)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 7,
+                              ),
+                              decoration: BoxDecoration(
+                                color: p.accent.withValues(alpha: 0.14),
+                                borderRadius: BorderRadius.circular(999),
+                                border: Border.all(
+                                  color: p.accent.withValues(alpha: 0.45),
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.local_fire_department_rounded,
+                                    size: 17,
+                                    color: p.accent,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    bm.kcalMin == bm.kcalMax
+                                        ? '${bm.kcalMin}'
+                                        : '${bm.kcalMin}–${bm.kcalMax}',
+                                    style: TextStyle(
+                                      color: p.text,
+                                      fontWeight: FontWeight.w800,
+                                      fontFeatures: const [
+                                        FontFeature.tabularFigures(),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'kcal',
+                                    style: TextStyle(
+                                      color: p.muted,
+                                      fontSize: 12.5,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          const Spacer(),
+                          if (bm.share != MacroShare.rest)
+                            TextButton.icon(
+                              onPressed: () => editSplit(cur),
+                              style: TextButton.styleFrom(
+                                foregroundColor: p.accent,
+                                visualDensity: VisualDensity.compact,
+                              ),
+                              icon: const Icon(
+                                Icons.call_split_rounded,
+                                size: 18,
+                              ),
+                              label: Text(
+                                bm.share == MacroShare.part
+                                    ? 'Ändern'
+                                    : 'Aufteilen',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
                     ] else
                       Text(
                         'Wähle die Mahlzeit, dann stehen hier deine Makros aus PREPIT.',

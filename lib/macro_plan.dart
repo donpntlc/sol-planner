@@ -7,6 +7,80 @@ export 'macro_plan_stub.dart' if (dart.library.js_interop) 'macro_plan_web.dart'
 /// SharedPreferences-Keys (werden per Cloud-Sync übertragen).
 const String kMacroPlanPrefKey = 'planner_macro_plan_v1';
 const String kMacroMealByTitlePrefKey = 'planner_macro_meal_by_title_v1';
+const String kMacroSplitsPrefKey = 'planner_macro_splits_v1';
+
+/// Teil einer Mahlzeit, der in einem anderen Block gegessen wird
+/// (z. B. 30 g Protein direkt nach dem Aufstehen).
+class MacroSplit {
+  const MacroSplit({
+    required this.title,
+    this.carbs = 0,
+    this.protein = 0,
+    this.fat = 0,
+  });
+
+  /// Block, in dem dieser Teil gegessen wird (Titel wie angezeigt).
+  final String title;
+  final int carbs;
+  final int protein;
+  final int fat;
+
+  int get kcal => carbs * 4 + protein * 4 + fat * 9;
+
+  String get shortLabel {
+    final parts = <String>[
+      if (protein > 0) '$protein g Protein',
+      if (carbs > 0) '$carbs g Carbs',
+      if (fat > 0) '$fat g Fett',
+    ];
+    return parts.isEmpty ? 'nichts' : parts.join(', ');
+  }
+
+  static MacroSplit? fromJson(Object? j) {
+    if (j is! Map) return null;
+    final t = (j['title'] ?? '').toString();
+    if (t.trim().isEmpty) return null;
+    int v(String k) => (j[k] as num?)?.round() ?? 0;
+    return MacroSplit(
+      title: t,
+      carbs: v('carbs'),
+      protein: v('protein'),
+      fat: v('fat'),
+    );
+  }
+
+  Map<String, Object> toJson() => {
+    'title': title,
+    'carbs': carbs,
+    'protein': protein,
+    'fat': fat,
+  };
+}
+
+/// Was ein Block anzeigt: ganze Mahlzeit, abgespaltener Teil oder Rest.
+enum MacroShare { full, part, rest }
+
+class BlockMacros {
+  const BlockMacros({
+    required this.meal,
+    required this.share,
+    required this.carbs,
+    required this.protein,
+    required this.fat,
+    required this.kcalMin,
+    required this.kcalMax,
+    this.split,
+  });
+
+  final MealMacros meal;
+  final MacroShare share;
+  final String carbs;
+  final String protein;
+  final String fat;
+  final int kcalMin;
+  final int kcalMax;
+  final MacroSplit? split;
+}
 
 /// Bereich eines Makros für eine Mahlzeit (aus PREPIT).
 class MacroRange {
@@ -87,8 +161,13 @@ class MacroPlan {
     List<MealMacros>? meals,
     this.created,
     Map<String, String>? mealByTitle,
+    Map<String, MacroSplit>? splits,
   }) : meals = meals ?? [],
-       mealByTitle = mealByTitle ?? {};
+       mealByTitle = mealByTitle ?? {},
+       splits = splits ?? {};
+
+  /// Mahlzeit-ID → abgespaltener Teil.
+  final Map<String, MacroSplit> splits;
 
   final List<MealMacros> meals;
   final DateTime? created;
@@ -113,6 +192,63 @@ class MacroPlan {
     final saved = mealByTitle[_key(title)];
     if (saved != null) return saved.isEmpty ? null : byId(saved);
     return byId(guessMealId(title) ?? '');
+  }
+
+  MacroSplit? splitFor(String mealId) => splits[mealId];
+
+  void setSplit(String mealId, MacroSplit? split) {
+    if (split == null) {
+      splits.remove(mealId);
+    } else {
+      splits[mealId] = split;
+    }
+  }
+
+  /// Makros, die dieser Block zeigt (inkl. Aufteilung).
+  BlockMacros? blockMacros(String title) {
+    final m = mealFor(title);
+    if (m == null) return null;
+    final sp = splits[m.id];
+    if (sp == null) {
+      return BlockMacros(
+        meal: m,
+        share: MacroShare.full,
+        carbs: m.carbs.label,
+        protein: m.protein.label,
+        fat: m.fat.label,
+        kcalMin: m.kcalMin,
+        kcalMax: m.kcalMax,
+      );
+    }
+    if (_key(sp.title) == _key(title)) {
+      String g(int v) => v <= 0 ? '–' : '$v g';
+      return BlockMacros(
+        meal: m,
+        share: MacroShare.part,
+        carbs: g(sp.carbs),
+        protein: g(sp.protein),
+        fat: g(sp.fat),
+        kcalMin: sp.kcal,
+        kcalMax: sp.kcal,
+        split: sp,
+      );
+    }
+    String rest(MacroRange r, int used) {
+      final a = (r.minG - used).clamp(0, 9999);
+      final b = (r.maxG - used).clamp(0, 9999);
+      if (b <= 0) return '–';
+      return a == b ? '$a g' : '$a–$b g';
+    }
+    return BlockMacros(
+      meal: m,
+      share: MacroShare.rest,
+      carbs: rest(m.carbs, sp.carbs),
+      protein: rest(m.protein, sp.protein),
+      fat: rest(m.fat, sp.fat),
+      kcalMin: (m.kcalMin - sp.kcal).clamp(0, 99999),
+      kcalMax: (m.kcalMax - sp.kcal).clamp(0, 99999),
+      split: sp,
+    );
   }
 
   void setMeal(String title, String? mealId) {
@@ -140,7 +276,11 @@ class MacroPlan {
   }
 
   /// Liest eine PREPIT-Exportdatei. Wirft bei falschem Format.
-  static MacroPlan parseExport(String text, {Map<String, String>? keepMapping}) {
+  static MacroPlan parseExport(
+    String text, {
+    Map<String, String>? keepMapping,
+    Map<String, MacroSplit>? keepSplits,
+  }) {
     final j = jsonDecode(text);
     if (j is! Map || j['app'] != 'prepit-macroplan' || j['meals'] is! List) {
       throw const FormatException('kein PREPIT-Makroplan');
@@ -153,6 +293,7 @@ class MacroPlan {
       meals: meals,
       created: DateTime.tryParse((j['created'] ?? '').toString()),
       mealByTitle: keepMapping,
+      splits: keepSplits,
     );
   }
 
@@ -169,10 +310,23 @@ class MacroPlan {
           });
         }
       }
+      final splits = <String, MacroSplit>{};
+      final rawSp = prefs.getString(kMacroSplitsPrefKey);
+      if (rawSp != null && rawSp.isNotEmpty) {
+        final d = jsonDecode(rawSp);
+        if (d is Map) {
+          d.forEach((k, v) {
+            final sp = MacroSplit.fromJson(v);
+            if (k is String && sp != null) splits[k] = sp;
+          });
+        }
+      }
       final raw = prefs.getString(kMacroPlanPrefKey);
-      if (raw == null || raw.isEmpty) return MacroPlan(mealByTitle: map);
+      if (raw == null || raw.isEmpty) {
+        return MacroPlan(mealByTitle: map, splits: splits);
+      }
       final d = jsonDecode(raw);
-      if (d is! Map) return MacroPlan(mealByTitle: map);
+      if (d is! Map) return MacroPlan(mealByTitle: map, splits: splits);
       return MacroPlan(
         meals: [
           for (final m in (d['meals'] as List? ?? const []))
@@ -180,6 +334,7 @@ class MacroPlan {
         ],
         created: DateTime.tryParse((d['created'] ?? '').toString()),
         mealByTitle: map,
+        splits: splits,
       );
     } catch (_) {
       return MacroPlan();
@@ -197,6 +352,10 @@ class MacroPlan {
         }),
       );
       await prefs.setString(kMacroMealByTitlePrefKey, jsonEncode(mealByTitle));
+      await prefs.setString(
+        kMacroSplitsPrefKey,
+        jsonEncode(splits.map((k, v) => MapEntry(k, v.toJson()))),
+      );
     } catch (_) {}
   }
 }
