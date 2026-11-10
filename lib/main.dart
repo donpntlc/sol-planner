@@ -6787,12 +6787,64 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                           final after = li >= 0 && li < chunk.length - 1
                               ? chunk.sublist(li + 1)
                               : const <TimeBlock>[];
-                          Widget card(TimeBlock b) => Padding(
-                            padding: const EdgeInsets.only(bottom: 10),
-                            child: IgnorePointer(
-                              child: _blockCard(context, b, true, false),
-                            ),
-                          );
+                          Widget card(TimeBlock b) {
+                            final p = context.palette;
+                            final c = _stripeForBlock(b);
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: Container(
+                                padding: const EdgeInsets.fromLTRB(
+                                  14,
+                                  12,
+                                  14,
+                                  12,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Color.alphaBlend(
+                                    c.withValues(alpha: 0.22),
+                                    p.surface,
+                                  ),
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: c.withValues(alpha: 0.8),
+                                    width: 1.4,
+                                  ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Text(
+                                      _fmtMin(b.startMin),
+                                      style: TextStyle(
+                                        color: p.muted,
+                                        fontSize: 12.5,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Text(
+                                        b.title,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          color: p.text,
+                                          fontWeight: FontWeight.w800,
+                                          fontSize: 15,
+                                        ),
+                                      ),
+                                    ),
+                                    Text(
+                                      _fmtDurationShort(b.duration),
+                                      style: TextStyle(
+                                        color: p.muted,
+                                        fontSize: 12.5,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          }
                           return AnimatedBuilder(
                             animation: a,
                             builder: (context, _) {
@@ -6800,8 +6852,8 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                               Widget lifted(Widget w) => Material(
                                 elevation: 8 * t,
                                 shadowColor: Colors.black38,
-                                color: Colors.transparent,
                                 borderRadius: BorderRadius.circular(16),
+                                clipBehavior: Clip.antiAlias,
                                 child: Opacity(
                                   opacity: 0.94 + 0.06 * t,
                                   child: w,
@@ -6821,13 +6873,11 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                                           left: 0,
                                           right: 0,
                                           bottom: h,
-                                          child: lifted(
-                                            Column(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                for (final b in before) card(b),
-                                              ],
-                                            ),
+                                          child: Column(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              for (final b in before) card(b),
+                                            ],
                                           ),
                                         ),
                                       Positioned.fill(child: lifted(child)),
@@ -6836,13 +6886,11 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                                           left: 0,
                                           right: 0,
                                           top: h,
-                                          child: lifted(
-                                            Column(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                for (final b in after) card(b),
-                                              ],
-                                            ),
+                                          child: Column(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              for (final b in after) card(b),
+                                            ],
                                           ),
                                         ),
                                     ],
@@ -15147,6 +15195,13 @@ class _BacklogQuickComposerState extends State<_BacklogQuickComposer> {
       ],
     );
   }
+}
+
+String _fmtDurationShort(int m) {
+  if (m < 60) return '$m min';
+  final h = m ~/ 60;
+  final r = m % 60;
+  return r == 0 ? '$h h' : '$h:${r.toString().padLeft(2, '0')} h';
 }
 
 String _fmtMin(int min) {
