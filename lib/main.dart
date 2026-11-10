@@ -11287,8 +11287,9 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                                             ),
                                           ],
                                         ),
-                                        if (_subtaskQuickPresets
-                                            .isNotEmpty) ...[
+                                        if (draftSubtasks.isEmpty &&
+                                            _subtaskQuickPresets
+                                                .isNotEmpty) ...[
                                           const SizedBox(height: 6),
                                           SingleChildScrollView(
                                             scrollDirection: Axis.horizontal,
@@ -11492,6 +11493,58 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                                               ),
                                             ),
                                           ],
+                                        ),
+                                        const SizedBox(height: 12),
+                                        dividerRow(),
+                                        const SizedBox(height: 12),
+                                        if (!notesEditing &&
+                                            notesCtrl.text.trim().isNotEmpty)
+                                          GestureDetector(
+                                            behavior: HitTestBehavior.opaque,
+                                            onTap: () => setSheet(
+                                              () => notesEditing = true,
+                                            ),
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.stretch,
+                                              children: [
+                                                _formattedNotes(
+                                                  context,
+                                                  notesCtrl.text,
+                                                ),
+                                                const SizedBox(height: 8),
+                                                Text(
+                                                  'Tippen zum Bearbeiten',
+                                                  style: TextStyle(
+                                                    color: p.muted.withValues(
+                                                      alpha: 0.7,
+                                                    ),
+                                                    fontSize: 11.5,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          )
+                                        else
+                                        TextField(
+                                          controller: notesCtrl,
+                                          autofocus: notesEditing,
+                                          minLines: 3,
+                                          maxLines: 14,
+                                          style: TextStyle(
+                                            color: p.text,
+                                            height: 1.45,
+                                          ),
+                                          decoration: InputDecoration(
+                                            hintText:
+                                                'Notizen, Links, Kurzinfos …',
+                                            hintStyle: TextStyle(
+                                              color: p.muted.withValues(
+                                                alpha: 0.85,
+                                              ),
+                                            ),
+                                            border: InputBorder.none,
+                                          ),
                                         ),
                                         if (!allDay &&
                                             previewStart < previewEnd) ...[
@@ -11744,58 +11797,6 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                                             }),
                                           ],
                                         ],
-                                        const SizedBox(height: 16),
-                                        dividerRow(),
-                                        const SizedBox(height: 12),
-                                        if (!notesEditing &&
-                                            notesCtrl.text.trim().isNotEmpty)
-                                          GestureDetector(
-                                            behavior: HitTestBehavior.opaque,
-                                            onTap: () => setSheet(
-                                              () => notesEditing = true,
-                                            ),
-                                            child: Column(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.stretch,
-                                              children: [
-                                                _formattedNotes(
-                                                  context,
-                                                  notesCtrl.text,
-                                                ),
-                                                const SizedBox(height: 8),
-                                                Text(
-                                                  'Tippen zum Bearbeiten',
-                                                  style: TextStyle(
-                                                    color: p.muted.withValues(
-                                                      alpha: 0.7,
-                                                    ),
-                                                    fontSize: 11.5,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          )
-                                        else
-                                        TextField(
-                                          controller: notesCtrl,
-                                          autofocus: notesEditing,
-                                          minLines: 3,
-                                          maxLines: 14,
-                                          style: TextStyle(
-                                            color: p.text,
-                                            height: 1.45,
-                                          ),
-                                          decoration: InputDecoration(
-                                            hintText:
-                                                'Notizen, Links, Kurzinfos …',
-                                            hintStyle: TextStyle(
-                                              color: p.muted.withValues(
-                                                alpha: 0.85,
-                                              ),
-                                            ),
-                                            border: InputBorder.none,
-                                          ),
-                                        ),
                                       ],
                                     ),
                                   ),
