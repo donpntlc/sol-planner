@@ -3114,6 +3114,12 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
         onTap: _openMacroPlanSheet,
       ),
       (
+        icon: Icons.save_as_rounded,
+        label: 'Tag als Preset speichern',
+        sub: 'Aktuellen Plan als Vorlage übernehmen',
+        onTap: _saveDayAsPresetSheet,
+      ),
+      (
         icon: Icons.checklist_rounded,
         label: 'To-do-Liste (Deep Work)',
         sub: null,
@@ -3223,6 +3229,99 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
       },
     );
     if (picked != null && mounted) picked();
+  }
+
+  Future<void> _saveDayAsPresetSheet() async {
+    final day = _onlyDay(_selectedDate);
+    final blocks = (_days[day] ?? const <TimeBlock>[])
+        .where((b) => !b.allDay)
+        .toList()
+      ..sort((a, b) => a.startMin.compareTo(b.startMin));
+    if (blocks.isEmpty) {
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        const SnackBar(content: Text('Dieser Tag hat noch keine Blöcke.')),
+      );
+      return;
+    }
+    final picked = await showModalBottomSheet<PlannerPresetType>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) {
+        final p = sheetCtx.palette;
+        return ClipRRect(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+          child: Material(
+            color: p.surface,
+            child: SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 14, 20, 12),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      'Tag als Preset speichern',
+                      style: TextStyle(
+                        color: p.text,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 19,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      '${blocks.length} Blöcke vom ${day.day}.${day.month}. werden die neue Vorlage '
+                      '(Titel, Zeiten, Kategorie, Notizen). Welches Preset?',
+                      style: TextStyle(color: p.muted, height: 1.35),
+                    ),
+                    const SizedBox(height: 10),
+                    for (final t in PlannerPresetType.values)
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(
+                          _presetLabel(t),
+                          style: TextStyle(
+                            color: p.text,
+                            fontWeight: t == PlannerPresetType.hustle530
+                                ? FontWeight.w800
+                                : FontWeight.w600,
+                          ),
+                        ),
+                        trailing: Icon(
+                          Icons.chevron_right_rounded,
+                          color: p.muted,
+                        ),
+                        onTap: () => Navigator.pop(sheetCtx, t),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+    if (picked == null || !mounted) return;
+    final lines = [
+      for (final b in blocks)
+        PresetTaskLine(
+          title: b.title,
+          startMin: b.startMin,
+          endMin: b.endMin,
+          colorLabel: b.colorLabel,
+          notes: b.notes,
+        ),
+    ];
+    setState(() => _presetTaskOverrides[picked] = lines);
+    await _savePresetTaskOverrides();
+    if (!mounted) return;
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+      SnackBar(
+        content: Text(
+          'Gespeichert: ${_presetLabel(picked)} hat jetzt ${lines.length} Blöcke.',
+        ),
+      ),
+    );
   }
 
   // ─── Makroplan aus PREPIT ─────────────────────────────────────────────────
