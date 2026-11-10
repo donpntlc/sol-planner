@@ -8269,8 +8269,14 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                           tightPhone ? 4 : 6,
                           tightPhone ? 9 : 10,
                         ),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.center,
+                        child: Column(
+ mainAxisSize: MainAxisSize.min,
+ crossAxisAlignment: CrossAxisAlignment.stretch,
+ children: [
+Row(
+                          crossAxisAlignment: expanded
+                              ? CrossAxisAlignment.start
+                              : CrossAxisAlignment.center,
                           children: [
                             Row(
                               mainAxisSize: MainAxisSize.min,
@@ -8821,7 +8827,20 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                                                 ),
                                             ],
                                           ),
-                                          if (expanded && blockMacros != null) ...[
+                                          
+                                          
+                                          
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+ Padding(padding: const EdgeInsets.fromLTRB(6, 0, 6, 2), child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+if (expanded && blockMacros != null) ...[
                                             const SizedBox(height: 10),
                                             Container(
                                               width: double.infinity,
@@ -8832,9 +8851,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                                                 10,
                                               ),
                                               decoration: BoxDecoration(
-                                                color: p.bg.withValues(
-                                                  alpha: 0.35,
-                                                ),
+                                                border: Border.all(color: p.hairline),
                                                 borderRadius:
                                                     BorderRadius.circular(14),
                                               ),
@@ -8920,7 +8937,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                                               ),
                                             ),
                                           ],
-                                          if (expanded && deepTodoCount > 0) ...[
+if (expanded && deepTodoCount > 0) ...[
                                             const SizedBox(height: 10),
                                             Text(
                                               'To do List',
@@ -9024,7 +9041,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                                                     ),
                                               ),
                                           ],
-                                          if (expanded && subTotal > 0) ...[
+if (expanded && subTotal > 0) ...[
                                             const SizedBox(height: 10),
                                             ...block.subtasks
                                                 .take(8)
@@ -9078,15 +9095,9 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                                                   ),
                                                 ),
                                           ],
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
+],),),
+],
+),
                       ),
                     ],
                   ),
