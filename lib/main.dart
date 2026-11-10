@@ -10617,7 +10617,53 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                       row('Carbs', cur.carbs.label),
                       row('Protein', cur.protein.label),
                       row('Fett', cur.fat.label),
-                      if (cur.kcalMax > 0) row('kcal', cur.kcalLabel),
+                      if (cur.kcalMax > 0) ...[
+                        const SizedBox(height: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 7,
+                          ),
+                          decoration: BoxDecoration(
+                            color: p.accent.withValues(alpha: 0.14),
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(
+                              color: p.accent.withValues(alpha: 0.45),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.local_fire_department_rounded,
+                                size: 17,
+                                color: p.accent,
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                cur.kcalMin == cur.kcalMax
+                                    ? '${cur.kcalMin}'
+                                    : '${cur.kcalMin}–${cur.kcalMax}',
+                                style: TextStyle(
+                                  color: p.text,
+                                  fontWeight: FontWeight.w800,
+                                  fontFeatures: const [
+                                    FontFeature.tabularFigures(),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                'kcal',
+                                style: TextStyle(
+                                  color: p.muted,
+                                  fontSize: 12.5,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ] else
                       Text(
                         'Wähle die Mahlzeit, dann stehen hier deine Makros aus PREPIT.',
