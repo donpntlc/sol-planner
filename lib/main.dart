@@ -7724,9 +7724,15 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
   /// Streifen-Verlauf; [clipCornerRadius] ≈ Innenkante der Karte (leicht erweitert gegen Anti-Alias-Lücken).
   /// Füllfarbe vergangener Blöcke: Kategoriefarbe, kräftig abgedunkelt (kein „Kreide“-Look).
   /// Dunkel: Richtung Schwarz. Hell: blasser Farbton, damit Text lesbar bleibt.
-  Color _pastFillColor(Color c, AppPalette p) => p.isDark
-      ? Color.lerp(c, Colors.black, 0.72)!
-      : Color.lerp(c, Colors.white, 0.55)!;
+  /// Vergangene Blöcke: in Kategoriefarbe gefüllt, aber ausgegraut (entsättigt).
+  Color _pastFillColor(Color c, AppPalette p) {
+    final l = (0.299 * c.r + 0.587 * c.g + 0.114 * c.b).clamp(0.0, 1.0);
+    final grey = Color.from(alpha: 1, red: l, green: l, blue: l);
+    final muted = Color.lerp(c, grey, 0.55)!;
+    return p.isDark
+        ? Color.lerp(muted, Colors.black, 0.42)!
+        : Color.lerp(muted, Colors.white, 0.55)!;
+  }
 
   /// Block liegt komplett in der Vergangenheit (→ voll gefüllt dargestellt).
   bool _isBlockPast(TimeBlock b) {
