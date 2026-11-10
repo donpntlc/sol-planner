@@ -9404,11 +9404,7 @@ if (expanded && subTotal > 0) ...[
                   width: flexColW,
                   child: Center(
                     child: showDragHandle
-                        ? Tooltip(
-                            message:
-                                'Ziehen — alle markierten verschiebbaren Blöcke wandern zusammen '
-                                '(dazwischen liegende werden mit markiert).',
-                            child: Listener(
+                        ? Listener(
                               behavior: HitTestBehavior.deferToChild,
                               onPointerDown: (_) =>
                                   onFlexDragHandlePointerDown?.call(),
@@ -9424,8 +9420,7 @@ if (expanded && subTotal > 0) ...[
                                   ),
                                 ),
                               ),
-                            ),
-                          )
+                            )
                         : const SizedBox.shrink(),
                   ),
                 ),
