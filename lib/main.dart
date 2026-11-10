@@ -7844,6 +7844,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
     final lineClr = p.hairline.withValues(alpha: p.isDark ? 0.65 : 0.85);
     final durLabel = _blockDurationSubtitle(block);
     final expanded = _expandedBlockIds.contains(block.id);
+    final blockMacros = _macroPlan.blockMacros(block.title);
     final subDone = block.subtasks.where((s) => s.done).length;
     final subTotal = block.subtasks.length;
     final deepTodos = _blockShowsRolledDeepWorkTodos(block)
@@ -8772,40 +8773,18 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                                                   ],
                                                 ),
                                               if (block.notes.trim().isNotEmpty)
-                                                InkWell(
-                                                  onTap: () => setState(() {
-                                                    if (!_expandedBlockIds
-                                                        .remove(block.id)) {
-                                                      _expandedBlockIds.add(
-                                                        block.id,
-                                                      );
-                                                    }
-                                                  }),
-                                                  borderRadius:
-                                                      BorderRadius.circular(10),
-                                                  child: Padding(
-                                                    padding:
-                                                        const EdgeInsets.symmetric(
-                                                          horizontal: 8,
-                                                          vertical: 6,
+                                                Icon(
+                                                  Icons.notes_rounded,
+                                                  size: 15,
+                                                  color: activeLiveForeground
+                                                      ? liveInk
+                                                      : p.muted.withValues(
+                                                          alpha: 0.85,
                                                         ),
-                                                    child: Icon(
-                                                      Icons.notes_rounded,
-                                                      size: 17,
-                                                      color:
-                                                          activeLiveForeground
-                                                          ? liveInk
-                                                          : expanded
-                                                          ? p.accent
-                                                          : p.muted.withValues(
-                                                              alpha: 0.85,
-                                                            ),
-                                                    ),
-                                                  ),
                                                 ),
                                               if (subTotal > 0 ||
                                                   deepTodoCount > 0 ||
-                                                  block.notes.trim().isNotEmpty)
+                                                  blockMacros != null)
                                                 InkWell(
                                                   onTap: () {
                                                     setState(() {
@@ -8842,6 +8821,105 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                                                 ),
                                             ],
                                           ),
+                                          if (expanded && blockMacros != null) ...[
+                                            const SizedBox(height: 10),
+                                            Container(
+                                              width: double.infinity,
+                                              padding: const EdgeInsets.fromLTRB(
+                                                12,
+                                                10,
+                                                12,
+                                                10,
+                                              ),
+                                              decoration: BoxDecoration(
+                                                color: p.bg.withValues(
+                                                  alpha: 0.35,
+                                                ),
+                                                borderRadius:
+                                                    BorderRadius.circular(14),
+                                              ),
+                                              child: Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: [
+                                                  for (final e in [
+                                                    ('Carbs', blockMacros.carbs),
+                                                    (
+                                                      'Protein',
+                                                      blockMacros.protein,
+                                                    ),
+                                                    ('Fett', blockMacros.fat),
+                                                  ])
+                                                    Padding(
+                                                      padding:
+                                                          const EdgeInsets.only(
+                                                            bottom: 3,
+                                                          ),
+                                                      child: Row(
+                                                        children: [
+                                                          SizedBox(
+                                                            width: 70,
+                                                            child: Text(
+                                                              '${e.$1}:',
+                                                              style: TextStyle(
+                                                                color: p.text,
+                                                                fontSize: 13,
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .w700,
+                                                              ),
+                                                            ),
+                                                          ),
+                                                          Expanded(
+                                                            child: Text(
+                                                              e.$2,
+                                                              style: TextStyle(
+                                                                color: p.muted,
+                                                                fontSize: 13,
+                                                              ),
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                  if (blockMacros.kcalMax > 0)
+                                                    Padding(
+                                                      padding:
+                                                          const EdgeInsets.only(
+                                                            top: 3,
+                                                          ),
+                                                      child: Row(
+                                                        children: [
+                                                          Icon(
+                                                            Icons
+                                                                .local_fire_department_rounded,
+                                                            size: 15,
+                                                            color: p.accent,
+                                                          ),
+                                                          const SizedBox(
+                                                            width: 5,
+                                                          ),
+                                                          Text(
+                                                            blockMacros.kcalMin ==
+                                                                    blockMacros
+                                                                        .kcalMax
+                                                                ? '${blockMacros.kcalMin} kcal'
+                                                                : '${blockMacros.kcalMin}–${blockMacros.kcalMax} kcal',
+                                                            style: TextStyle(
+                                                              color: p.text,
+                                                              fontSize: 13,
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .w800,
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                ],
+                                              ),
+                                            ),
+                                          ],
                                           if (expanded && deepTodoCount > 0) ...[
                                             const SizedBox(height: 10),
                                             Text(
@@ -8999,30 +9077,6 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                                                     ),
                                                   ),
                                                 ),
-                                          ],
-                                          if (expanded &&
-                                              block.notes.trim().isNotEmpty) ...[
-                                            const SizedBox(height: 10),
-                                            Container(
-                                              width: double.infinity,
-                                              padding: const EdgeInsets.fromLTRB(
-                                                12,
-                                                10,
-                                                12,
-                                                4,
-                                              ),
-                                              decoration: BoxDecoration(
-                                                color: p.bg.withValues(
-                                                  alpha: 0.35,
-                                                ),
-                                                borderRadius:
-                                                    BorderRadius.circular(14),
-                                              ),
-                                              child: _formattedNotes(
-                                                context,
-                                                block.notes,
-                                              ),
-                                            ),
                                           ],
                                         ],
                                       ),
