@@ -7730,7 +7730,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
     final grey = Color.from(alpha: 1, red: l, green: l, blue: l);
     final muted = Color.lerp(c, grey, 0.55)!;
     return p.isDark
-        ? Color.lerp(muted, Colors.black, 0.42)!
+        ? Color.lerp(muted, Colors.black, 0.32)!
         : Color.lerp(muted, Colors.white, 0.55)!;
   }
 
