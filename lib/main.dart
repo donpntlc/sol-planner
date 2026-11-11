@@ -935,6 +935,16 @@ const String _kFirstLaunchWelcomeShownPrefKey =
     'planner_first_launch_welcome_shown_v1';
 const String _kDeepWorkTodoEnabledPrefKey = 'planner_deep_work_todo_enabled_v1';
 const String _kBlockTasksPrefKey = 'planner_block_tasks_v1';
+const String _kFeatureTogglesPrefKey = 'planner_feature_toggles_v1';
+
+/// Schaltbare Funktionen (Einstellungen → Funktionen).
+const List<({String id, String label, String sub, IconData icon})> _kFeatures = [
+  (id: 'checklist', label: 'Checkliste', sub: 'Unterpunkte im Block', icon: Icons.checklist_rounded),
+  (id: 'tasks', label: 'Aufgaben', sub: 'Liste, die in den nächsten Block mitwandert', icon: Icons.format_list_numbered_rounded),
+  (id: 'macros', label: 'Makros', sub: 'Makros aus PREPIT pro Mahlzeit', icon: Icons.restaurant_menu_rounded),
+  (id: 'focus', label: 'Fokus & Pausen', sub: 'Block in Fokus- und Pausenabschnitte teilen', icon: Icons.timer_outlined),
+  (id: 'phone', label: 'Erinnerung aufs Handy', sub: 'Knopf für Kalender-Erinnerungen im Block', icon: Icons.phone_iphone_rounded),
+];
 const String _kDeepWorkTodoItemsPrefKey = 'planner_deep_work_todo_items_v1';
 const String _kShowFreeTimeLanesPrefKey = 'planner_show_free_time_lanes_v1';
 const String _kActivePresetPrefKey = 'planner_active_preset_key_v1';
@@ -2041,6 +2051,10 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
   /// und wandern immer in den aktuellen bzw. nächsten Block dieser Art.
   final Map<String, List<DeepWorkTodoItem>> _blockTasks = {};
 
+  /// Ausgeschaltete Funktionen (Standard: alles an).
+  final Set<String> _featuresOff = <String>{};
+  bool _featOn(String id) => !_featuresOff.contains(id);
+
   /// Projekt-Rotation für „Projekt-Session“-Blöcke.
   ProjectRotation _projectRotation = ProjectRotation();
 
@@ -2942,6 +2956,85 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
     return fallback;
   }
 
+  Future<void> _loadFeatureToggles() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_kFeatureTogglesPrefKey);
+      if (raw == null || raw.isEmpty) return;
+      final d = jsonDecode(raw);
+      if (d is! Map || d['off'] is! List) return;
+      if (!mounted) return;
+      setState(() {
+        _featuresOff
+          ..clear()
+          ..addAll([for (final x in d['off'] as List) if (x is String) x]);
+      });
+    } catch (_) {}
+  }
+
+  Future<void> _saveFeatureToggles() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        _kFeatureTogglesPrefKey,
+        jsonEncode({'off': _featuresOff.toList()}),
+      );
+    } catch (_) {}
+    solNotifyPlannerDiskDataChanged();
+  }
+
+  Future<void> _openFeaturesSheet() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) => StatefulBuilder(
+        builder: (ctx, setLocal) {
+          final p = ctx.palette;
+          return _sheetFrame(sheetCtx, [
+            Text(
+              'Funktionen',
+              style: TextStyle(
+                color: p.text,
+                fontWeight: FontWeight.w800,
+                fontSize: 20,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Was in den Blöcken angezeigt wird. Ausgeschaltetes bleibt gespeichert und ist beim Einschalten wieder da.',
+              style: TextStyle(color: p.muted, height: 1.35),
+            ),
+            const SizedBox(height: 8),
+            for (final f in _kFeatures)
+              SwitchListTile.adaptive(
+                contentPadding: EdgeInsets.zero,
+                secondary: Icon(f.icon, color: p.accent),
+                title: Text(
+                  f.label,
+                  style: TextStyle(color: p.text, fontWeight: FontWeight.w700),
+                ),
+                subtitle: Text(f.sub, style: TextStyle(color: p.muted)),
+                value: _featOn(f.id),
+                activeColor: p.accent,
+                onChanged: (v) {
+                  setState(() {
+                    if (v) {
+                      _featuresOff.remove(f.id);
+                    } else {
+                      _featuresOff.add(f.id);
+                    }
+                  });
+                  setLocal(() {});
+                  unawaited(_saveFeatureToggles());
+                },
+              ),
+          ]);
+        },
+      ),
+    );
+  }
+
   Future<void> _loadBlockTasks() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -3313,6 +3406,12 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
         label: 'Tag als Preset speichern',
         sub: 'Aktuellen Plan als Vorlage übernehmen',
         onTap: _saveDayAsPresetSheet,
+      ),
+      (
+        icon: Icons.tune_rounded,
+        label: 'Funktionen',
+        sub: 'Checkliste, Aufgaben, Makros … ein- oder ausblenden',
+        onTap: _openFeaturesSheet,
       ),
       (
         icon: Icons.checklist_rounded,
@@ -5689,6 +5788,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
     Future<void>.microtask(_loadReminderPrefs);
     Future<void>.microtask(_loadDeepWorkTodos);
     Future<void>.microtask(_loadBlockTasks);
+    Future<void>.microtask(_loadFeatureToggles);
     Future<void>.microtask(_loadProjectRotation);
     Future<void>.microtask(_loadMacroPlan);
     Future<void>.microtask(_loadDayGridView);
@@ -8432,11 +8532,13 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
     final lineClr = p.hairline.withValues(alpha: p.isDark ? 0.65 : 0.85);
     final durLabel = _blockDurationSubtitle(block);
     final expanded = _expandedBlockIds.contains(block.id);
-    final blockMacros = _macroPlan.blockMacros(block.title);
+    final blockMacros = _featOn('macros')
+        ? _macroPlan.blockMacros(block.title)
+        : null;
     final subDone = block.subtasks.where((s) => s.done).length;
-    final subTotal = block.subtasks.length;
+    final subTotal = _featOn('checklist') ? block.subtasks.length : 0;
     final taskKey = _taskKey(block.title);
-    final deepTodos = _taskHostFor(taskKey)?.id == block.id
+    final deepTodos = _featOn('tasks') && _taskHostFor(taskKey)?.id == block.id
         ? _openTasksFor(taskKey)
         : const <DeepWorkTodoItem>[];
     final deepTodoCount = deepTodos.length;
@@ -12745,6 +12847,7 @@ if (expanded && subTotal > 0) ...[
                                     ),
                                   ),
                                 ],
+                                if (_featOn('phone')) ...[
                                 const SizedBox(height: 10),
                                 Align(
                                   alignment: Alignment.centerLeft,
@@ -12783,12 +12886,15 @@ if (expanded && subTotal > 0) ...[
                                     ),
                                   ),
                                 ),
-                                if (!_macroPlan.isEmpty &&
+                                ],
+                                if (_featOn('macros') &&
+                                    !_macroPlan.isEmpty &&
                                     titleCtrl.text.trim().isNotEmpty) ...[
                                   const SizedBox(height: 14),
                                   macroSection(),
                                 ],
-                                if (titleCtrl.text.trim().isNotEmpty) ...[
+                                if (_featOn('tasks') &&
+                                    titleCtrl.text.trim().isNotEmpty) ...[
                                   const SizedBox(height: 14),
                                   tasksSection(),
                                 ],
@@ -12811,6 +12917,7 @@ if (expanded && subTotal > 0) ...[
                                       crossAxisAlignment:
                                           CrossAxisAlignment.start,
                                       children: [
+                                        if (_featOn('checklist')) ...[
                                         Row(
                                           crossAxisAlignment:
                                               CrossAxisAlignment.start,
@@ -13059,6 +13166,7 @@ if (expanded && subTotal > 0) ...[
                                         const SizedBox(height: 12),
                                         dividerRow(),
                                         const SizedBox(height: 12),
+                                        ],
                                         if (!notesEditing &&
                                             notesCtrl.text.trim().isNotEmpty)
                                           GestureDetector(
@@ -13108,7 +13216,8 @@ if (expanded && subTotal > 0) ...[
                                             border: InputBorder.none,
                                           ),
                                         ),
-                                        if (!allDay &&
+                                        if (_featOn('focus') &&
+                                            !allDay &&
                                             previewStart < previewEnd) ...[
                                           const SizedBox(height: 14),
                                           dividerRow(),
