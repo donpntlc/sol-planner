@@ -3164,6 +3164,13 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
   Future<void> _openMoreActionsSheet() async {
     final p = context.palette;
     final items = <({IconData icon, String label, String? sub, VoidCallback onTap})>[
+      if (!_projectRotation.isEmpty)
+        (
+          icon: Icons.play_circle_outline_rounded,
+          label: 'Jetzt: ${_projectRotation.upcoming()?.title ?? 'Circle'}',
+          sub: 'Nächstes aus dem Projekt Circle sofort starten',
+          onTap: _startCircleNowSheet,
+        ),
       (
         icon: Icons.autorenew_rounded,
         label: 'Projekt Circle',
@@ -4182,8 +4189,13 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
       return pid == null ? null : _projectRotation.byId(pid);
     }
     var offset = 0;
+    final now = DateTime.now();
+    final isToday = day == _onlyDay(now);
+    final nowMin = now.hour * 60 + now.minute;
     for (final x in _getBlocksForDay(_selectedDate)) {
       if (x.id == b.id || x.completed || !_isProjectSessionBlock(x)) continue;
+      // Verpasste (vergangene, nicht abgehakte) Sessions verbrauchen kein Projekt.
+      if (isToday && x.isLinearSlot && x.endMin <= nowMin) continue;
       if (x.startMin < b.startMin ||
           (x.startMin == b.startMin && x.id.compareTo(b.id) < 0)) {
         offset++;
@@ -4213,6 +4225,134 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
 
   String _fmtShortDate(DateTime d) =>
       '${_kWeekdayShort[d.weekday - 1]}, ${d.day}.${d.month}.${d.year == DateTime.now().year ? '' : d.year}';
+
+  /// Kurz nichts zu tun: Dauer wählen → Circle-Block startet sofort mit dem nächsten Projekt.
+  Future<void> _startCircleNowSheet() async {
+    if (_projectRotation.isEmpty) {
+      await _openProjectRotationSheet();
+      return;
+    }
+    final next = _projectRotation.upcoming()?.title ?? 'Projekt';
+    final after = _projectRotation.items.length > 1
+        ? _projectRotation.upcoming(1)?.title
+        : null;
+    final picked = await showModalBottomSheet<int>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) {
+        final p = sheetCtx.palette;
+        Widget chip(int m) => Expanded(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Material(
+              color: m == 30 ? p.accent : p.hintBg,
+              borderRadius: BorderRadius.circular(16),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(16),
+                onTap: () => Navigator.pop(sheetCtx, m),
+                child: SizedBox(
+                  height: 58,
+                  child: Center(
+                    child: Text(
+                      m == 60 ? '1 Std' : '$m min',
+                      style: TextStyle(
+                        color: m == 30 ? p.bg : p.text,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 15,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        return _sheetFrame(sheetCtx, [
+          Text(
+            'Jetzt dran',
+            style: TextStyle(
+              color: p.muted,
+              fontWeight: FontWeight.w700,
+              fontSize: 13,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              Icon(Icons.autorenew_rounded, color: p.accent),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  next,
+                  style: TextStyle(
+                    color: p.text,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 24,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (after != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              'Danach im Circle: $after',
+              style: TextStyle(color: p.muted, height: 1.35),
+            ),
+          ],
+          const SizedBox(height: 18),
+          Text(
+            'Wie lange?',
+            style: TextStyle(color: p.text, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 10),
+          Row(children: [chip(15), chip(30), chip(45), chip(60)]),
+          const SizedBox(height: 10),
+          Text(
+            'Startet ab jetzt. Abhaken, wenn fertig – dann rückt der Circle weiter.',
+            style: TextStyle(color: p.muted, fontSize: 12.5, height: 1.35),
+          ),
+        ]);
+      },
+    );
+    if (picked == null || !mounted) return;
+    _startCircleNow(picked);
+  }
+
+  void _startCircleNow(int minutes) {
+    final now = DateTime.now();
+    final today = _onlyDay(now);
+    final nowMin = now.hour * 60 + now.minute;
+    final s = (nowMin ~/ 5) * 5;
+    final e = (s + minutes).clamp(s + 5, 1440);
+    _recordUndoSnapshot();
+    setState(() => _selectedDate = today);
+    _getBlocksForDay(today);
+    final list = _days[today]!;
+    final block = _newBlock(
+      'Projekt Circle',
+      s,
+      e,
+      _categoryColors.containsKey('Fokus') ? 'Fokus' : _fallbackCategoryLabel(),
+      '',
+      customIconCodePoint: Icons.autorenew_rounded.codePoint,
+    );
+    setState(() {
+      list.add(block);
+      _makeRoomForBlock(list, block);
+      _repairOverlapsWithPins(list);
+      _repairUnpinnedLinearOverlaps(list);
+      _repairOverlapsWithPins(list);
+      _dayPlanPresetKind[today] = _kIndividualDayPresetKey;
+      _gridScrolledForDay = null;
+    });
+    _flushPersistDayPlans();
+    unawaited(_syncReminders());
+    final name = _projectSessionLabel(block) ?? 'Projekt Circle';
+    _offerUndoSnack(
+      'Jetzt: $name bis ${_fmtMin(block.endMin % 1440)}',
+    );
+  }
 
   /// Fertigen „Projekt-Session“-Block (60 min) in die nächste freie Lücke des Tages legen.
   void _addProjectSessionBlock() {
@@ -4607,6 +4747,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
     final addCtrl = TextEditingController();
     final addFocus = FocusNode();
     var addSession = false;
+    var startNow = false;
     try {
       await showModalBottomSheet<void>(
         context: context,
@@ -4664,6 +4805,19 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                   icon: const Icon(Icons.add_rounded),
                   label: const Text('Projekt Circle zum Plan hinzufügen'),
                 ),
+                if (rot.items.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    onPressed: () {
+                      startNow = true;
+                      Navigator.pop(sheetCtx);
+                    },
+                    icon: const Icon(Icons.play_arrow_rounded),
+                    label: Text(
+                      'Jetzt starten: ${rot.upcoming()?.title ?? ''}',
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 14),
                 if (rot.items.isEmpty)
                   Padding(
@@ -4840,6 +4994,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
       addFocus.dispose();
     }
     if (addSession && mounted) _addProjectSessionBlock();
+    if (startNow && mounted) unawaited(_startCircleNowSheet());
   }
 
   Future<void> _openReminderPrefsSheet() async {
