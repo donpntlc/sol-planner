@@ -1115,7 +1115,7 @@ List<PresetTaskLine> builtinHustle530Lines() => [
         title: 'Morgen Routine',
         startMin: 330,
         endMin: 420,
-        colorLabel: 'Routine',
+        colorLabel: 'Mahlzeit',
       ),
       PresetTaskLine(
         title: 'Deep Work',
@@ -1124,10 +1124,10 @@ List<PresetTaskLine> builtinHustle530Lines() => [
         colorLabel: 'Fokus',
       ),
       PresetTaskLine(
-        title: 'Pre-Workout + Get Ready for Gym',
+        title: 'Pre-Workout + Get Ready for GYM',
         startMin: 540,
         endMin: 555,
-        colorLabel: 'Routine',
+        colorLabel: 'Mahlzeit',
       ),
       PresetTaskLine(
         title: "Let's Go GYM.",
@@ -1154,10 +1154,10 @@ List<PresetTaskLine> builtinHustle530Lines() => [
         colorLabel: 'Mahlzeit',
       ),
       PresetTaskLine(
-        title: 'Bibel',
+        title: 'Bibel Study 45min',
         startMin: 825,
         endMin: 885,
-        colorLabel: 'Wichtig',
+        colorLabel: 'Routine',
       ),
       PresetTaskLine(
         title: 'Trading | Cash Open',
@@ -4941,6 +4941,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
         if (!day.isBefore(_onlyDay(DateTime.now()))) {
           for (final b in blocks) {
             _enrichMorningRoutine(b);
+            if (pk == 'hustle530') _update530Block(b);
           }
         }
         parsedDays[day] = blocks;
@@ -5762,6 +5763,22 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
         ],
       ),
     );
+  }
+
+  /// Bereits angelegte 5:30-Tage an Deans aktuellen 5:30-Plan angleichen.
+  void _update530Block(TimeBlock b) {
+    final t = b.title.trim();
+    if ((t == 'Morgen Routine' || t == 'Pre-Workout + Get Ready for Gym') &&
+        b.colorLabel == 'Routine' &&
+        (b.customStripeHex ?? '').isEmpty) {
+      b.colorLabel = 'Mahlzeit';
+      if (t == 'Pre-Workout + Get Ready for Gym') {
+        b.title = 'Pre-Workout + Get Ready for GYM';
+      }
+    } else if (t == 'Bibel' && b.colorLabel == 'Wichtig') {
+      b.title = 'Bibel Study 45min';
+      b.colorLabel = 'Routine';
+    }
   }
 
   /// Morgenroutine ohne eigene Notizen/Checkliste bekommt Deans Standard-Inhalt.
