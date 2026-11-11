@@ -934,6 +934,7 @@ const String _kBuiltinPresetDisplayNamesPrefKey =
 const String _kFirstLaunchWelcomeShownPrefKey =
     'planner_first_launch_welcome_shown_v1';
 const String _kDeepWorkTodoEnabledPrefKey = 'planner_deep_work_todo_enabled_v1';
+const String _kBlockTasksPrefKey = 'planner_block_tasks_v1';
 const String _kDeepWorkTodoItemsPrefKey = 'planner_deep_work_todo_items_v1';
 const String _kShowFreeTimeLanesPrefKey = 'planner_show_free_time_lanes_v1';
 const String _kActivePresetPrefKey = 'planner_active_preset_key_v1';
@@ -2036,6 +2037,10 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
   bool _deepWorkTodoEnabled = true;
   final List<DeepWorkTodoItem> _deepWorkTodos = [];
 
+  /// Aufgabenlisten pro Block-Art (außer Deep Work): bleiben, bis sie erledigt sind,
+  /// und wandern immer in den aktuellen bzw. nächsten Block dieser Art.
+  final Map<String, List<DeepWorkTodoItem>> _blockTasks = {};
+
   /// Projekt-Rotation für „Projekt-Session“-Blöcke.
   ProjectRotation _projectRotation = ProjectRotation();
 
@@ -2887,6 +2892,122 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
       }
     }
     return null;
+  }
+
+  /// Block-Art aus dem Titel: „Deep Work 2“ → „deep work“, „Creative Time“ → „creative time“.
+  String _taskKey(String title) {
+    var t = title.toLowerCase();
+    if (t.contains('deep work') || t.contains('deepwork')) return 'deep work';
+    t = t.replaceAll(RegExp(r'[#·|+\-–_.,:!]'), ' ');
+    t = t.replaceAll(RegExp(r'\b\d+\b'), ' ');
+    return t.replaceAll(RegExp(r'\s+'), ' ').trim();
+  }
+
+  List<DeepWorkTodoItem> _tasksFor(String key) => key == 'deep work'
+      ? _deepWorkTodos
+      : _blockTasks.putIfAbsent(key, () => <DeepWorkTodoItem>[]);
+
+  List<DeepWorkTodoItem> _openTasksFor(String key) => _tasksFor(key)
+      .where((t) => !t.done && t.title.trim().isNotEmpty)
+      .toList();
+
+  bool _taskBlockMatches(TimeBlock b, String key) =>
+      !b.allDay && !b.completed && b.isLinearSlot && _taskKey(b.title) == key;
+
+  /// Der Block, in dem die Aufgaben gerade stehen: laufender Block dieser Art,
+  /// sonst der nächste (heute, dann die folgenden Tage).
+  TimeBlock? _taskHostFor(String key) {
+    if (key.isEmpty) return null;
+    if (key == 'deep work') {
+      return _deepWorkTodoEnabled ? _activeDeepWorkSessionNow() : null;
+    }
+    final now = DateTime.now();
+    final viewingToday = _onlyDay(_selectedDate) == _onlyDay(now);
+    final nowMin = now.hour * 60 + now.minute;
+    final day = _getBlocksForDay(_selectedDate);
+    TimeBlock? fallback;
+    for (final b in day) {
+      if (!_taskBlockMatches(b, key)) continue;
+      fallback ??= b;
+      if (!viewingToday || b.endMin > nowMin) return b;
+    }
+    if (!viewingToday) return fallback;
+    for (var i = 1; i <= 14; i++) {
+      final d = _onlyDay(now.add(Duration(days: i)));
+      _ensureDayExists(d);
+      for (final b in _getBlocksForDay(d)) {
+        if (_taskBlockMatches(b, key)) return b;
+      }
+    }
+    return fallback;
+  }
+
+  Future<void> _loadBlockTasks() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_kBlockTasksPrefKey);
+      if (raw == null || raw.isEmpty) return;
+      final d = jsonDecode(raw);
+      if (d is! Map) return;
+      final out = <String, List<DeepWorkTodoItem>>{};
+      d.forEach((k, v) {
+        if (k is! String || v is! List) return;
+        out[k] = [
+          for (final e in v)
+            if (e is Map<String, dynamic>) DeepWorkTodoItem.fromJson(e),
+        ].where((x) => x.id.isNotEmpty && x.title.isNotEmpty).toList();
+      });
+      if (!mounted) return;
+      setState(() {
+        _blockTasks
+          ..clear()
+          ..addAll(out);
+      });
+    } catch (_) {}
+  }
+
+  Future<void> _saveTasks(String key) async {
+    if (key == 'deep work') {
+      await _saveDeepWorkTodos();
+      return;
+    }
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final out = <String, dynamic>{};
+      _blockTasks.forEach((k, v) {
+        final keep = v.where((x) => !x.done).toList();
+        if (keep.isNotEmpty) out[k] = keep.map((e) => e.toJson()).toList();
+      });
+      await prefs.setString(_kBlockTasksPrefKey, jsonEncode(out));
+    } catch (_) {}
+    solNotifyPlannerDiskDataChanged();
+  }
+
+  Future<void> _addTask(String key, String raw) async {
+    final t = raw.trim();
+    if (t.isEmpty || key.isEmpty) return;
+    setState(() => _tasksFor(key).add(DeepWorkTodoItem(id: _nextId(), title: t)));
+    await _saveTasks(key);
+  }
+
+  Future<void> _completeTask(String key, DeepWorkTodoItem item) async {
+    setState(() => _tasksFor(key).removeWhere((x) => x.id == item.id));
+    await _saveTasks(key);
+  }
+
+  Future<void> _reorderTask(String key, int oldIndex, int newIndex) async {
+    final open = _openTasksFor(key);
+    if (oldIndex < 0 || oldIndex >= open.length) return;
+    if (newIndex > oldIndex) newIndex--;
+    final moved = open.removeAt(oldIndex);
+    open.insert(newIndex.clamp(0, open.length), moved);
+    setState(() {
+      final list = _tasksFor(key);
+      list
+        ..clear()
+        ..addAll(open);
+    });
+    await _saveTasks(key);
   }
 
   List<DeepWorkTodoItem> _openDeepWorkTodos() =>
@@ -5567,6 +5688,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
     Future<void>.microtask(_loadSubtaskQuickPresets);
     Future<void>.microtask(_loadReminderPrefs);
     Future<void>.microtask(_loadDeepWorkTodos);
+    Future<void>.microtask(_loadBlockTasks);
     Future<void>.microtask(_loadProjectRotation);
     Future<void>.microtask(_loadMacroPlan);
     Future<void>.microtask(_loadDayGridView);
@@ -8313,8 +8435,9 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
     final blockMacros = _macroPlan.blockMacros(block.title);
     final subDone = block.subtasks.where((s) => s.done).length;
     final subTotal = block.subtasks.length;
-    final deepTodos = _blockShowsRolledDeepWorkTodos(block)
-        ? _openDeepWorkTodos()
+    final taskKey = _taskKey(block.title);
+    final deepTodos = _taskHostFor(taskKey)?.id == block.id
+        ? _openTasksFor(taskKey)
         : const <DeepWorkTodoItem>[];
     final deepTodoCount = deepTodos.length;
     // Vergangene Blöcke sind komplett gefüllt, der laufende anteilig; Schein nur beim laufenden.
@@ -9079,7 +9202,7 @@ Row(
                                           const SizedBox(height: 5),
                                           Text(
                                             deepTodoCount > 0
-                                                ? '${block.colorLabel} · $durLabel · $deepTodoCount To-do${deepTodoCount == 1 ? '' : 's'}'
+                                                ? '${block.colorLabel} · $durLabel · $deepTodoCount Aufgabe${deepTodoCount == 1 ? '' : 'n'}'
                                                 : '${block.colorLabel} · $durLabel',
                                             style: Theme.of(context)
                                                 .textTheme
@@ -9406,7 +9529,7 @@ if (expanded && blockMacros != null) ...[
 if (expanded && deepTodoCount > 0) ...[
                                             const SizedBox(height: 10),
                                             Text(
-                                              'To do List',
+                                              'Aufgaben',
                                               style: Theme.of(context)
                                                   .textTheme
                                                   .labelSmall
@@ -9430,9 +9553,9 @@ if (expanded && deepTodoCount > 0) ...[
                                                 child: InkWell(
                                                   onTap: () =>
                                                       unawaited(
-                                                        _toggleDeepWorkTodo(
+                                                        _completeTask(
+                                                          taskKey,
                                                           item,
-                                                          !item.done,
                                                         ),
                                                       ),
                                                   borderRadius:
@@ -10401,6 +10524,7 @@ if (expanded && subTotal > 0) ...[
     final titleCtrl = TextEditingController(text: editing?.title ?? '');
     final circleAddCtrl = TextEditingController();
     var notesEditing = false;
+    final taskAddCtrl = TextEditingController();
     final notesCtrl = TextEditingController(text: editing?.notes ?? '');
     final subtaskInputCtrl = TextEditingController();
 
@@ -11172,6 +11296,170 @@ if (expanded && subTotal > 0) ...[
                 (!useCategoryStripe && draftCustomStripeHex != null)
                 ? _colorFromHexString(draftCustomStripeHex!)
                 : _stripeColor(colorLabel);
+            Widget tasksSection() {
+              final key = _taskKey(titleCtrl.text);
+              final open = _openTasksFor(key);
+              final c = checkCol;
+              void add() {
+                final t = taskAddCtrl.text.trim();
+                if (t.isEmpty) return;
+                taskAddCtrl.clear();
+                unawaited(_addTask(key, t).then((_) => setSheet(() {})));
+              }
+              return Container(
+                padding: const EdgeInsets.fromLTRB(16, 12, 12, 10),
+                decoration: BoxDecoration(
+                  color: p.surface,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: p.hairline),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Aufgaben',
+                      style: TextStyle(
+                        color: p.text,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 15.5,
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Container(
+                      width: 28,
+                      height: 2.5,
+                      decoration: BoxDecoration(
+                        color: c,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Bleiben stehen und wandern in den nächsten „${titleCtrl.text.trim()}“-Block, bis du sie abhakst. Ziehen ändert die Reihenfolge.',
+                      style: TextStyle(color: p.muted, fontSize: 12, height: 1.35),
+                    ),
+                    const SizedBox(height: 8),
+                    if (open.isNotEmpty)
+                      ReorderableListView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        buildDefaultDragHandles: false,
+                        itemCount: open.length,
+                        onReorder: (o, n) => unawaited(
+                          _reorderTask(key, o, n).then((_) => setSheet(() {})),
+                        ),
+                        proxyDecorator: (child, i, a) => Material(
+                          color: p.surface,
+                          elevation: 6,
+                          borderRadius: BorderRadius.circular(12),
+                          child: child,
+                        ),
+                        itemBuilder: (context, i) {
+                          final it = open[i];
+                          return Padding(
+                            key: ValueKey<String>('task-${it.id}'),
+                            padding: const EdgeInsets.symmetric(vertical: 3),
+                            child: Row(
+                              children: [
+                                GestureDetector(
+                                  behavior: HitTestBehavior.opaque,
+                                  onTap: () => unawaited(
+                                    _completeTask(key, it).then(
+                                      (_) => setSheet(() {}),
+                                    ),
+                                  ),
+                                  child: Padding(
+                                    padding: const EdgeInsets.fromLTRB(0, 6, 12, 6),
+                                    child: Container(
+                                      width: 22,
+                                      height: 22,
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                          color: c.withValues(alpha: 0.8),
+                                          width: 1.6,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      if (i == 0)
+                                        Text(
+                                          'JETZT DRAN',
+                                          style: TextStyle(
+                                            color: c,
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w800,
+                                            letterSpacing: 0.6,
+                                          ),
+                                        ),
+                                      Text(
+                                        it.title,
+                                        style: TextStyle(
+                                          color: p.text,
+                                          fontSize: 15,
+                                          fontWeight: i == 0
+                                              ? FontWeight.w700
+                                              : FontWeight.w500,
+                                          height: 1.3,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                ReorderableDragStartListener(
+                                  index: i,
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(8),
+                                    child: Icon(
+                                      Icons.drag_handle_rounded,
+                                      color: p.muted,
+                                      size: 22,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    Row(
+                      children: [
+                        Icon(Icons.add_rounded, color: p.muted, size: 22),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: TextField(
+                            controller: taskAddCtrl,
+                            style: TextStyle(color: p.text, fontSize: 15),
+                            textInputAction: TextInputAction.done,
+                            onSubmitted: (_) => add(),
+                            decoration: InputDecoration(
+                              hintText: 'Aufgabe hinzufügen …',
+                              hintStyle: TextStyle(color: p.muted),
+                              border: InputBorder.none,
+                              isDense: true,
+                              contentPadding: const EdgeInsets.symmetric(
+                                vertical: 10,
+                              ),
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: add,
+                          icon: Icon(Icons.arrow_upward_rounded, color: c),
+                          tooltip: 'Hinzufügen',
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              );
+            }
+
             Widget macroSection() {
               final title = titleCtrl.text;
               final cur = _macroPlan.mealFor(title);
@@ -12499,6 +12787,10 @@ if (expanded && subTotal > 0) ...[
                                     titleCtrl.text.trim().isNotEmpty) ...[
                                   const SizedBox(height: 14),
                                   macroSection(),
+                                ],
+                                if (titleCtrl.text.trim().isNotEmpty) ...[
+                                  const SizedBox(height: 14),
+                                  tasksSection(),
                                 ],
                                 const SizedBox(height: 14),
                                 Container(
