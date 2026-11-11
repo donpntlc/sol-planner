@@ -9959,6 +9959,7 @@ if (expanded && subTotal > 0) ...[
         b.isLinearSlot &&
         !b.isOvernightSlot &&
         !b.pinned;
+    final orig = {for (final b in day) b.id: b.startMin};
     for (final b in day) {
       if (!movable(b)) continue;
       if (b.startMin < a.startMin && b.endMin > a.startMin) {
@@ -9974,7 +9975,7 @@ if (expanded && subTotal > 0) ...[
     final later = day
         .where((b) => movable(b) && b.startMin >= a.startMin)
         .toList()
-      ..sort((x, y) => x.startMin.compareTo(y.startMin));
+      ..sort((x, y) => (orig[x.id] ?? x.startMin).compareTo(orig[y.id] ?? y.startMin));
     var cursor = a.endMin;
     for (final b in later) {
       if (b.startMin >= cursor) break;
