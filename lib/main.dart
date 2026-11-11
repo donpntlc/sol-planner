@@ -789,7 +789,10 @@ class PresetTaskLine {
     required this.endMin,
     required this.colorLabel,
     this.notes = '',
-  });
+    this.stripeHex,
+    this.iconCode,
+    List<String>? subtasks,
+  }) : subtasks = List<String>.unmodifiable(subtasks ?? const []);
 
   final String title;
   final int startMin;
@@ -797,13 +800,16 @@ class PresetTaskLine {
   final String colorLabel;
   final String notes;
 
-  PresetTaskLine copy() => PresetTaskLine(
-    title: title,
-    startMin: startMin,
-    endMin: endMin,
-    colorLabel: colorLabel,
-    notes: notes,
-  );
+  /// Eigene Blockfarbe (statt Kategoriefarbe), z. B. '#2E7D5B'.
+  final String? stripeHex;
+
+  /// Eigenes Symbol (Material-Icon-Codepoint).
+  final int? iconCode;
+
+  /// Checklisten-Punkte.
+  final List<String> subtasks;
+
+  PresetTaskLine copy() => copyWith();
 
   PresetTaskLine copyWith({
     String? title,
@@ -818,6 +824,9 @@ class PresetTaskLine {
       endMin: endMin ?? this.endMin,
       colorLabel: colorLabel ?? this.colorLabel,
       notes: notes ?? this.notes,
+      stripeHex: stripeHex,
+      iconCode: iconCode,
+      subtasks: subtasks,
     );
   }
 
@@ -827,6 +836,10 @@ class PresetTaskLine {
     'endMin': endMin,
     'colorLabel': colorLabel,
     'notes': notes,
+    if (stripeHex != null && stripeHex!.trim().isNotEmpty)
+      'stripeHex': stripeHex,
+    if (iconCode != null) 'iconCode': iconCode,
+    if (subtasks.isNotEmpty) 'subtasks': subtasks,
   };
 
   factory PresetTaskLine.fromJson(Map<String, dynamic> j) {
@@ -839,6 +852,12 @@ class PresetTaskLine {
       endMin: ((j['endMin'] as num?)?.toInt().clamp(0, 1440)) ?? 60,
       colorLabel: rawCat,
       notes: (j['notes'] as String?) ?? '',
+      stripeHex: (j['stripeHex'] as String?)?.trim(),
+      iconCode: (j['iconCode'] as num?)?.toInt(),
+      subtasks: [
+        for (final x in (j['subtasks'] as List? ?? const []))
+          if (x is String && x.trim().isNotEmpty) x,
+      ],
     );
   }
 }
@@ -3319,7 +3338,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                     const SizedBox(height: 6),
                     Text(
                       '${blocks.length} Blöcke vom ${day.day}.${day.month}. werden die neue Vorlage '
-                      '(Titel, Zeiten, Kategorie, Notizen). Welches Preset?',
+                      '(Titel, Zeiten, Kategorie, Farbe, Symbol, Notizen, Checkliste). Welches Preset?',
                       style: TextStyle(color: p.muted, height: 1.35),
                     ),
                     const SizedBox(height: 10),
@@ -3358,6 +3377,9 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
           endMin: b.endMin,
           colorLabel: b.colorLabel,
           notes: b.notes,
+          stripeHex: b.customStripeHex,
+          iconCode: b.customIconCodePoint,
+          subtasks: [for (final st in b.subtasks) st.title],
         ),
     ];
     setState(() => _presetTaskOverrides[picked] = lines);
@@ -5732,6 +5754,12 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
         _normalizePresetCategoryLabel(line.colorLabel),
         '',
         notes: line.notes,
+        customStripeHex: line.stripeHex,
+        customIconCodePoint: line.iconCode,
+        subtasks: [
+          for (final t in line.subtasks)
+            BlockSubtask(id: _nextId(), title: t),
+        ],
       ),
     );
   }
