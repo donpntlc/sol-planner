@@ -3410,7 +3410,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
       (
         icon: Icons.tune_rounded,
         label: 'Funktionen',
-        sub: 'Checkliste, Aufgaben, Makros … ein- oder ausblenden',
+        sub: 'Was im Block angezeigt wird',
         onTap: _openFeaturesSheet,
       ),
       (
