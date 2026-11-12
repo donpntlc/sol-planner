@@ -1385,13 +1385,13 @@ List<PresetTaskLine> builtinP530Lines() => [
       ),
       PresetTaskLine(
         title: 'Abendroutine',
-        startMin: 1360,
-        endMin: 1395,
+        startMin: 1350,
+        endMin: 1380,
         colorLabel: 'Routine',
       ),
       PresetTaskLine(
         title: 'Go to bed',
-        startMin: 1395,
+        startMin: 1380,
         endMin: 330,
         colorLabel: 'Routine',
       ),
