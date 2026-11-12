@@ -8995,9 +8995,14 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
     required bool tightPhone,
   }) {
     final p = context.palette;
-    final h = _minutesToLaneHeight(
-      endMin - startMin,
-      tightPhone: tightPhone,
+    final now0 = DateTime.now();
+    final nowMin0 = now0.hour * 60 + now0.minute;
+    final isNow0 = _onlyDay(_selectedDate) == _onlyDay(now0) &&
+        nowMin0 >= startMin &&
+        nowMin0 < endMin;
+    final h = max(
+      _minutesToLaneHeight(endMin - startMin, tightPhone: tightPhone),
+      isNow0 ? 84.0 : 0.0,
     );
     final timeColW = tightPhone ? 44.0 : 48.0;
     final railW = tightPhone ? 28.0 : 33.0;
@@ -9075,7 +9080,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                           Positioned(
                             left: 0,
                             right: 0,
-                            top: (h - 4) * nowFrac,
+                            top: (6 + (h - 24) * nowFrac).toDouble(),
                             child: IgnorePointer(
                               child: Row(
                                 children: [
