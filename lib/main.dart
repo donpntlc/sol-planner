@@ -1986,6 +1986,8 @@ IconData _materialIcon(int codePoint) =>
 IconData _resolveBlockIcon(TimeBlock b) {
   final c = b.customIconCodePoint;
   if (c != null) return _materialIcon(c);
+  // Projekt Circle / Cyrcle-Block: Kreis aus zwei Pfeilen.
+  if (!b.allDay && isProjectSessionTitle(b.title)) return Icons.autorenew_rounded;
   return _categoryIcon(b.colorLabel);
 }
 
