@@ -34,7 +34,7 @@ const double _kAppUiScale = 0.88;
 const double _kPastBlockOpacity = 0.8;
 
 const _kColorPickerDragScale =
-    0.48; // <1: gleiche Fingerbewegung → kleinere Farbänderung (feinere Bedienung).
+    0.48; // <1: gleiche Fingerbewegung > kleinere Farbänderung (feinere Bedienung).
 const _kHuePickerDragScale = 0.52;
 
 /// Fixiert den Startpunkt eines Drags im Farbwahl-Sheet (über [StatefulBuilder]-Rebuilds hinweg).
@@ -4064,7 +4064,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                     step(
                       1,
                       'In PREPIT exportieren',
-                      'Einstellungen → „Makroplan exportieren“. Datei in „Dateien“ sichern.',
+                      'Einstellungen > „Makroplan exportieren“. Datei in „Dateien“ sichern.',
                     ),
                     step(
                       2,
@@ -4145,7 +4145,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(
         const SnackBar(
           content: Text(
-            'Das ist keine Makroplan-Datei. In PREPIT: Einstellungen → Makroplan exportieren.',
+            'Das ist keine Makroplan-Datei. In PREPIT: Einstellungen > Makroplan exportieren.',
           ),
         ),
       );
@@ -4820,7 +4820,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
               ),
               const SizedBox(height: 6),
               Text(
-                'Jedes Mal, wenn ${item.title} dran ist, kommt die nächste Variante: A → B → C … '
+                'Jedes Mal, wenn ${item.title} dran ist, kommt die nächste Variante (A, dann B, dann C …). '
                 'Namen sind optional (leer = nur der Buchstabe).',
                 style: TextStyle(color: p.muted, height: 1.35),
               ),
@@ -4937,12 +4937,12 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
 
 ## Abwechseln (A/B/C …)
 • Mehrere Dinge auf einem Platz – über das Gabel-Symbol beim Projekt, getrennt mit „/“.
-• Beispiel – 2 Sprache: Portugiesisch / Serbisch. Dann: Klavier → Portugiesisch → Klavier → Serbisch.
+• Beispiel – 2 Sprache: Portugiesisch / Serbisch. Dann: Klavier > Portugiesisch > Klavier > Serbisch.
 • Beliebig viele – Unwichtiges kann sich einen Platz teilen, z. B. 2 Rest: Mails / Steuern / Aufräumen / …
 • Beim Hinzufügen direkt – „Sprache: Portugiesisch / Serbisch“ eintippen.
 
 ## Sonst
-• Jetzt starten – kurz nichts zu tun? ⋯ → „Jetzt: …“ legt sofort einen Block mit dem Nächsten an.
+• Jetzt starten – kurz nichts zu tun? ⋯ > „Jetzt: …“ legt sofort einen Block mit dem Nächsten an.
 • Verlauf & Notizen – Circle-Block antippen."""),
         ]);
       },
@@ -5359,7 +5359,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                 if (pr != null && _projectRotation.items.length > 1) ...[
                   const SizedBox(height: 6),
                   Text(
-                    'Danach: ${_circleOrderFrom(pr).skip(1).map((e) => e.title).join(' → ')}',
+                    'Danach: ${_circleOrderFrom(pr).skip(1).map((e) => e.title).join(' > ')}',
                     style: TextStyle(color: p.muted, fontSize: 13),
                   ),
                 ],
@@ -15656,7 +15656,7 @@ if (expanded && subTotal > 0) ...[
                       TextSpan(
                         text:
                             'Plan Luft am Anfang und Ende ein — dann kannst du markierte Blöcke bündig verschieben. '
-                            'Fixierte Blöcke bleiben stehen (⋯ → Block fixieren); andere rutschen drumherum '
+                            'Fixierte Blöcke bleiben stehen (⋯ > Block fixieren); andere rutschen drumherum '
                             'und werden bei Überlappung automatisch vorher/nachher gesplittet.',
                       ),
                     ],
