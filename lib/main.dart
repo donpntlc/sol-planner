@@ -9327,6 +9327,19 @@ Row(
                                             crossAxisAlignment:
                                                 CrossAxisAlignment.center,
                                             children: [
+                                              if (_isProjectSessionBlock(block))
+                                                Padding(
+                                                  padding: const EdgeInsets.only(
+                                                    right: 6,
+                                                  ),
+                                                  child: Icon(
+                                                    Icons.autorenew_rounded,
+                                                    size: tightPhone ? 17 : 18,
+                                                    color: activeLiveForeground
+                                                        ? liveInk
+                                                        : stripe,
+                                                  ),
+                                                ),
                                               Expanded(
                                                 child: Text(
                                                   block.title,
