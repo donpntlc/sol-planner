@@ -6791,14 +6791,40 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
     try {
       final prefs = await SharedPreferences.getInstance();
       final raw = prefs.getString(_kUserPresetDaysPrefKey);
-      if (raw == null || raw.isEmpty) return;
-      final arr = jsonDecode(raw);
-      if (arr is! List) return;
       final loaded = <UserPresetDay>[];
-      for (final item in arr) {
-        if (item is Map<String, dynamic>) {
-          loaded.add(UserPresetDay.fromJson(Map<String, dynamic>.from(item)));
+      if (raw != null && raw.isNotEmpty) {
+        final arr = jsonDecode(raw);
+        if (arr is List) {
+          for (final item in arr) {
+            if (item is Map<String, dynamic>) {
+              loaded.add(
+                UserPresetDay.fromJson(Map<String, dynamic>.from(item)),
+              );
+            }
+          }
         }
+      }
+      // Einmalig: 5:30 (= Sommer, Standard) bekommt eine Winter-Variante.
+      const migWinter = 'planner_mig_530_winter_v1';
+      var added = false;
+      if (prefs.getBool(migWinter) != true) {
+        final has = loaded.any(
+          (u) => u.parentKey == PlannerPresetType.p530.name &&
+              u.name.toLowerCase().contains('winter'),
+        );
+        if (!has) {
+          loaded.add(
+            UserPresetDay(
+              id: _newUserPresetDayIdStatic(),
+              name: '5:30 Winter',
+              lines: [for (final l in builtinP530Lines()) l.copy()],
+              parentKey: PlannerPresetType.p530.name,
+              diff: const {'changed': {}, 'removed': [], 'added': []},
+            ),
+          );
+          added = true;
+        }
+        await prefs.setBool(migWinter, true);
       }
       if (!mounted) return;
       setState(() {
@@ -6808,6 +6834,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
         _refreshPresetVariants();
         _sanitizeActivePresetKeyIfStale();
       });
+      if (added) await _saveUserPresetDays();
     } catch (_) {}
   }
 
@@ -16902,7 +16929,7 @@ String _presetLabel(PlannerPresetType p) {
     case PlannerPresetType.hustle530:
       return '5:30AM Hustle';
     case PlannerPresetType.p530:
-      return '5:30';
+      return '5:30 (Sommer)';
     case PlannerPresetType.monk:
       return 'Monk Mode';
     case PlannerPresetType.alltag:
