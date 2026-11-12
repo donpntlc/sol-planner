@@ -9272,7 +9272,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
     // Innenradius ~ R−Stroke, etwas Überstand: Anti-Alias lässt sonst einen dünnen Spalt zwischen Rand und Streifen.
     // Gilt auch für Mahlzeit-Blöcke (vorher 14 → sichtbare Lücke an Rundung/Rand).
     final innerClipRadiusLive =
-        ((14.0 - liveBorderPx) + 1.05).clamp(6.5, 13.4);
+        ((14.0 - liveBorderPx) - 1.0).clamp(4.0, 13.0);
 
     final Color borderLine = mealVis
         ? MealBlockTheme.outline.withValues(
@@ -9635,6 +9635,11 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                         : highlightCard
                         ? stripe.withValues(alpha: isLiveNow ? 0.26 : 0.14)
                         : Color.alphaBlend(fill, p.surface),
+                    boxShadow: cardDropShadows,
+                  ),
+                  // Rand wird ÜBER die Füllung gezeichnet → keine Lücke zwischen Rand und Fortschritt.
+                  foregroundDecoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(14),
                     border: Border.all(
                       color: cardEdgeColor,
                       width: openFreizeitSlot
@@ -9643,7 +9648,11 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                                 ? (isLiveNow ? 2.35 : 1.85)
                                 : 1.4),
                     ),
-                    boxShadow: cardDropShadows,
+                  ),
+                  padding: EdgeInsets.all(
+                    openFreizeitSlot
+                        ? (highlightCard ? 2.08 : 2.02)
+                        : (highlightCard ? (isLiveNow ? 2.35 : 1.85) : 1.4),
                   ),
                   child: Stack(
                     fit: StackFit.passthrough,
