@@ -3106,7 +3106,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
           final p = ctx.palette;
           return _sheetFrame(sheetCtx, [
             Text(
-              'Funktionen',
+              'Ein- & ausblenden',
               style: TextStyle(
                 color: p.text,
                 fontWeight: FontWeight.w800,
@@ -3490,87 +3490,99 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
   /// „Mehr“-Menü oben rechts: alle Werkzeuge als beschriftete Liste.
   Future<void> _openMoreActionsSheet() async {
     final p = context.palette;
-    final items = <({IconData icon, String label, String? sub, VoidCallback onTap})>[
-      if (!_projectRotation.isEmpty)
-        (
-          icon: Icons.play_circle_outline_rounded,
-          label: 'Jetzt: ${_projectRotation.upcomingLabel() ?? 'Circle'}',
-          sub: 'Nächstes aus dem Projekt Circle sofort starten',
-          onTap: _startCircleNowSheet,
-        ),
+    final circleNext = _projectRotation.upcomingLabel();
+    final sections = <({
+      String title,
+      List<({IconData icon, String label, String? sub, VoidCallback onTap})> items
+    })>[
       (
-        icon: Icons.autorenew_rounded,
-        label: 'Projekt Circle',
-        sub: _projectRotation.upcomingLabel() == null
-            ? 'Projekte festlegen'
-            : 'Als Nächstes: ${_projectRotation.upcomingLabel()!}',
-        onTap: _openProjectRotationSheet,
+        title: 'Funktionen',
+        items: [
+          (
+            icon: Icons.autorenew_rounded,
+            label: 'Projekt Circle',
+            sub: circleNext == null
+                ? 'Projekte festlegen'
+                : 'Als Nächstes: $circleNext',
+            onTap: _openProjectRotationSheet,
+          ),
+          (
+            icon: Icons.format_list_numbered_rounded,
+            label: 'Aufgaben (Deep Work)',
+            sub: 'Liste, die mitwandert, bis sie erledigt ist',
+            onTap: _openDeepWorkTodoSheet,
+          ),
+          (
+            icon: Icons.restaurant_menu_rounded,
+            label: 'Makroplan',
+            sub: _macroPlan.isEmpty
+                ? 'Makros aus PREPIT übernehmen'
+                : 'Stand ${_macroPlan.created == null ? '–' : '${_macroPlan.created!.day}.${_macroPlan.created!.month}.'} · ${_macroPlan.meals.length} Mahlzeiten',
+            onTap: _openMacroPlanSheet,
+          ),
+          (
+            icon: Icons.edit_note_rounded,
+            label: 'Notizen zum Tag',
+            sub: null,
+            onTap: _openIndividuellNotesSheet,
+          ),
+        ],
       ),
       (
-        icon: Icons.restaurant_menu_rounded,
-        label: 'Makroplan',
-        sub: _macroPlan.isEmpty
-            ? 'Makros aus PREPIT übernehmen – kurze Anleitung'
-            : 'Stand ${_macroPlan.created == null ? '–' : '${_macroPlan.created!.day}.${_macroPlan.created!.month}.'} · ${_macroPlan.meals.length} Mahlzeiten',
-        onTap: _openMacroPlanSheet,
+        title: 'Pläne & Presets',
+        items: [
+          (
+            icon: Icons.save_as_rounded,
+            label: 'Tag als Preset speichern',
+            sub: 'Aktuellen Plan als Vorlage übernehmen',
+            onTap: _saveDayAsPresetSheet,
+          ),
+          (
+            icon: Icons.date_range_rounded,
+            label: 'Preset-Zeitraum',
+            sub: 'Welche Vorlage an welchen Tagen gilt',
+            onTap: _openPresetWindowDialog,
+          ),
+        ],
       ),
       (
-        icon: Icons.save_as_rounded,
-        label: 'Tag als Preset speichern',
-        sub: 'Aktuellen Plan als Vorlage übernehmen',
-        onTap: _saveDayAsPresetSheet,
-      ),
-      (
-        icon: Icons.tune_rounded,
-        label: 'Funktionen',
-        sub: 'Was im Block angezeigt wird',
-        onTap: _openFeaturesSheet,
-      ),
-      (
-        icon: Icons.checklist_rounded,
-        label: 'To-do-Liste (Deep Work)',
-        sub: null,
-        onTap: _openDeepWorkTodoSheet,
-      ),
-      (
-        icon: Icons.edit_note_rounded,
-        label: 'Notizen zum Tag',
-        sub: null,
-        onTap: _openIndividuellNotesSheet,
-      ),
-      (
-        icon: Icons.date_range_rounded,
-        label: 'Preset-Zeitraum',
-        sub: 'Welche Vorlage an welchen Tagen gilt',
-        onTap: _openPresetWindowDialog,
-      ),
-      (
-        icon: Icons.notifications_none_outlined,
-        label: 'Erinnerungen & Wecker',
-        sub: null,
-        onTap: _openReminderPrefsSheet,
-      ),
-      (
-        icon: _showFreeTimeLanes
-            ? Icons.view_agenda_outlined
-            : Icons.view_day_outlined,
-        label: _showFreeTimeLanes
-            ? 'Freizeit-Leisten ausblenden'
-            : 'Freizeit-Leisten anzeigen',
-        sub: 'Nur in der Listen-Ansicht',
-        onTap: () => unawaited(_setShowFreeTimeLanes(!_showFreeTimeLanes)),
-      ),
-      (
-        icon: Icons.format_color_fill_outlined,
-        label: 'Kategoriefarben',
-        sub: null,
-        onTap: _openCategoryColorSettings,
-      ),
-      (
-        icon: Icons.cloud_outlined,
-        label: 'Cloud-Sync',
-        sub: 'Mehrere Geräte',
-        onTap: _openCloudSyncSheet,
+        title: 'Einstellungen',
+        items: [
+          (
+            icon: Icons.tune_rounded,
+            label: 'Ein- & ausblenden',
+            sub: 'Checkliste, Aufgaben, Makros … im Block',
+            onTap: _openFeaturesSheet,
+          ),
+          (
+            icon: Icons.notifications_none_outlined,
+            label: 'Erinnerungen & Wecker',
+            sub: null,
+            onTap: _openReminderPrefsSheet,
+          ),
+          (
+            icon: Icons.format_color_fill_outlined,
+            label: 'Kategoriefarben',
+            sub: null,
+            onTap: _openCategoryColorSettings,
+          ),
+          (
+            icon: _showFreeTimeLanes
+                ? Icons.view_agenda_outlined
+                : Icons.view_day_outlined,
+            label: _showFreeTimeLanes
+                ? 'Freizeit-Leisten ausblenden'
+                : 'Freizeit-Leisten anzeigen',
+            sub: 'Lücken in der Liste',
+            onTap: () => unawaited(_setShowFreeTimeLanes(!_showFreeTimeLanes)),
+          ),
+          (
+            icon: Icons.cloud_outlined,
+            label: 'Cloud-Sync',
+            sub: 'Mehrere Geräte',
+            onTap: _openCloudSyncSheet,
+          ),
+        ],
       ),
     ];
     final picked = await showModalBottomSheet<VoidCallback>(
@@ -3578,6 +3590,55 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (sheetCtx) {
+        Widget group(
+          List<({IconData icon, String label, String? sub, VoidCallback onTap})>
+              items,
+        ) {
+          return Container(
+            decoration: BoxDecoration(
+              color: p.bg.withValues(alpha: p.isDark ? 0.45 : 0.6),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: p.hairline),
+            ),
+            child: Column(
+              children: [
+                for (var i = 0; i < items.length; i++) ...[
+                  if (i > 0)
+                    Divider(
+                      height: 1,
+                      indent: 56,
+                      color: p.hairline,
+                    ),
+                  ListTile(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    leading: Icon(items[i].icon, color: p.accent),
+                    title: Text(
+                      items[i].label,
+                      style: TextStyle(
+                        color: p.text,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    subtitle: items[i].sub == null
+                        ? null
+                        : Text(
+                            items[i].sub!,
+                            style: TextStyle(color: p.muted),
+                          ),
+                    trailing: Icon(
+                      Icons.chevron_right_rounded,
+                      color: p.muted,
+                    ),
+                    onTap: () => Navigator.pop(sheetCtx, items[i].onTap),
+                  ),
+                ],
+              ],
+            ),
+          );
+        }
+
         return ClipRRect(
           borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
           child: Material(
@@ -3586,47 +3647,85 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
               top: false,
               child: ConstrainedBox(
                 constraints: BoxConstraints(
-                  maxHeight: MediaQuery.sizeOf(sheetCtx).height * 0.85,
+                  maxHeight: MediaQuery.sizeOf(sheetCtx).height * 0.88,
                 ),
                 child: ListView(
                   shrinkWrap: true,
-                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+                  padding: const EdgeInsets.fromLTRB(14, 10, 14, 16),
                   children: [
                     Center(
                       child: Container(
                         width: 40,
                         height: 4,
-                        margin: const EdgeInsets.only(bottom: 10),
+                        margin: const EdgeInsets.only(bottom: 12),
                         decoration: BoxDecoration(
                           color: p.hairline,
                           borderRadius: BorderRadius.circular(99),
                         ),
                       ),
                     ),
-                    for (final it in items)
-                      ListTile(
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        leading: Icon(it.icon, color: p.accent),
-                        title: Text(
-                          it.label,
-                          style: TextStyle(
-                            color: p.text,
-                            fontWeight: FontWeight.w600,
+                    if (circleNext != null) ...[
+                      Material(
+                        color: p.accent,
+                        borderRadius: BorderRadius.circular(16),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(16),
+                          onTap: () =>
+                              Navigator.pop(sheetCtx, _startCircleNowSheet),
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 13, 12, 13),
+                            child: Row(
+                              children: [
+                                Icon(Icons.play_arrow_rounded, color: p.bg),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Jetzt starten',
+                                        style: TextStyle(
+                                          color: p.bg.withValues(alpha: 0.75),
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                      Text(
+                                        circleNext,
+                                        style: TextStyle(
+                                          color: p.bg,
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Icon(Icons.autorenew_rounded, color: p.bg),
+                              ],
+                            ),
                           ),
                         ),
-                        subtitle: it.sub == null
-                            ? null
-                            : Text(it.sub!, style: TextStyle(color: p.muted)),
-                        trailing: Icon(
-                          Icons.chevron_right_rounded,
-                          color: p.muted,
-                        ),
-                        onTap: () {
-                          Navigator.pop(sheetCtx, it.onTap);
-                        },
                       ),
+                      const SizedBox(height: 16),
+                    ],
+                    for (final sec in sections) ...[
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(6, 0, 6, 8),
+                        child: Text(
+                          sec.title.toUpperCase(),
+                          style: TextStyle(
+                            color: p.muted,
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 1.2,
+                          ),
+                        ),
+                      ),
+                      group(sec.items),
+                      const SizedBox(height: 16),
+                    ],
                   ],
                 ),
               ),
