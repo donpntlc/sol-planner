@@ -4596,6 +4596,48 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
     return vs.length < 2 ? <String>[] : vs;
   }
 
+  void _showCircleInfo() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) {
+        final p = sheetCtx.palette;
+        return _sheetFrame(sheetCtx, [
+          Row(
+            children: [
+              Icon(Icons.info_outline_rounded, color: p.accent),
+              const SizedBox(width: 10),
+              Text(
+                'So funktioniert der Circle',
+                style: TextStyle(
+                  color: p.text,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 19,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          _formattedNotes(sheetCtx, """## Plätze
+• Reihenfolge – jeder Circle-Block nimmt den nächsten Platz, nach dem letzten geht es von vorn los.
+• Weiterrücken – erst wenn du den Block abhakst. Nicht abgehakt = bleibt dran.
+• Wichtiges – bekommt einen eigenen Platz, z. B. 1 Klavier.
+
+## Abwechseln (A/B/C …)
+• Mehrere Dinge auf einem Platz – über das Gabel-Symbol beim Projekt, getrennt mit „/“.
+• Beispiel – 2 Sprache: Portugiesisch / Serbisch. Dann: Klavier → Portugiesisch → Klavier → Serbisch.
+• Beliebig viele – Unwichtiges kann sich einen Platz teilen, z. B. 2 Rest: Mails / Steuern / Aufräumen / …
+• Beim Hinzufügen direkt – „Sprache: Portugiesisch / Serbisch“ eintippen.
+
+## Sonst
+• Jetzt starten – kurz nichts zu tun? ⋯ → „Jetzt: …“ legt sofort einen Block mit dem Nächsten an.
+• Verlauf & Notizen – Circle-Block antippen."""),
+        ]);
+      },
+    );
+  }
+
   int _lastProjectOffset = 0;
 
   /// Name inkl. Variante („Sprache · Portugiesisch“).
@@ -5188,12 +5230,16 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                             ?.copyWith(fontWeight: FontWeight.w800),
                       ),
                     ),
+                    IconButton(
+                      tooltip: 'So funktioniert der Circle',
+                      icon: Icon(Icons.info_outline_rounded, color: p.accent),
+                      onPressed: _showCircleInfo,
+                    ),
                   ],
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'Deine Projekte im Kreis: jede Session nimmt automatisch das nächste. '
-                  'Tippen zeigt Verlauf & Notizen, ziehen ändert die Reihenfolge.',
+                  'Jede Session nimmt automatisch das nächste. Gabel = abwechselnde Varianten (A/B …). Ziehen ändert die Reihenfolge.',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: p.muted,
                     height: 1.35,
@@ -5393,7 +5439,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                         textInputAction: TextInputAction.done,
                         textCapitalization: TextCapitalization.sentences,
                         decoration: InputDecoration(
-                          hintText: 'Neues Projekt …',
+                          hintText: 'Neues Projekt … (oder Sprache: A / B)',
                           hintStyle: TextStyle(color: p.muted),
                           filled: true,
                           fillColor: p.bg.withValues(alpha: 0.35),
