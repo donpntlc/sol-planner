@@ -297,6 +297,10 @@ bool isProjectSessionTitle(String title) {
       t.startsWith('projekt circle') ||
       t.startsWith('project circle') ||
       t == 'circle' ||
+      t.startsWith('circle block') ||
+      t.startsWith('cyrcle') ||
+      t.startsWith('work circle') ||
+      t.startsWith('work cyrcle') ||
       t == 'projekte' ||
       t == 'project' ||
       t == 'projects' ||

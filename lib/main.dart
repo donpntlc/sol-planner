@@ -391,6 +391,7 @@ class PlannerHome extends StatefulWidget {
 enum PlannerPresetType {
   hustle,
   hustle530,
+  p530,
   monk,
   alltag,
   wochenende,
@@ -1235,6 +1236,106 @@ List<PresetTaskLine> builtinHustle530Lines() => [
     ];
 
 /// Vorlagen wie zuvor in `_buildPresetBlocks`; Überschreibungen kommen aus SharedPreferences.
+/// Deans neues 5:30-Preset (aus der Tagespläne-Seite übernommen, 12.11.2026).
+List<PresetTaskLine> builtinP530Lines() => [
+      PresetTaskLine(
+        title: 'Morgen Routine',
+        startMin: 330,
+        endMin: 420,
+        colorLabel: 'Mahlzeit',
+      ),
+      PresetTaskLine(
+        title: 'Deep Work',
+        startMin: 420,
+        endMin: 540,
+        colorLabel: 'Fokus',
+      ),
+      PresetTaskLine(
+        title: 'Pre-Workout + Get Ready for GYM',
+        startMin: 540,
+        endMin: 555,
+        colorLabel: 'Mahlzeit',
+      ),
+      PresetTaskLine(
+        title: "Let's Go GYM.",
+        startMin: 555,
+        endMin: 585,
+        colorLabel: 'Routine',
+      ),
+      PresetTaskLine(
+        title: 'Gym | Steps + Calisthenics Skill',
+        startMin: 585,
+        endMin: 735,
+        colorLabel: 'Fokus',
+      ),
+      PresetTaskLine(
+        title: "Let's Go Home.",
+        startMin: 735,
+        endMin: 780,
+        colorLabel: 'Routine',
+      ),
+      PresetTaskLine(
+        title: 'Shower + Post-Workout',
+        startMin: 780,
+        endMin: 825,
+        colorLabel: 'Mahlzeit',
+      ),
+      PresetTaskLine(
+        title: 'Bibel Study 45min',
+        startMin: 825,
+        endMin: 885,
+        colorLabel: 'Routine',
+      ),
+      PresetTaskLine(
+        title: 'Cyrcle block',
+        startMin: 900,
+        endMin: 960,
+        colorLabel: 'Routine',
+      ),
+      PresetTaskLine(
+        title: 'Main Meal',
+        startMin: 960,
+        endMin: 1020,
+        colorLabel: 'Mahlzeit',
+      ),
+      PresetTaskLine(
+        title: 'Trading | Journal',
+        startMin: 1080,
+        endMin: 1140,
+        colorLabel: 'Fokus',
+      ),
+      PresetTaskLine(
+        title: 'Deep Work 2',
+        startMin: 1140,
+        endMin: 1250,
+        colorLabel: 'Fokus',
+      ),
+      PresetTaskLine(
+        title: 'Creative Time',
+        startMin: 1250,
+        endMin: 1340,
+        colorLabel: 'Fokus',
+      ),
+      PresetTaskLine(
+        title: 'Evening Meal',
+        startMin: 1340,
+        endMin: 1360,
+        colorLabel: 'Mahlzeit',
+      ),
+      PresetTaskLine(
+        title: 'Abendroutine',
+        startMin: 1360,
+        endMin: 1395,
+        colorLabel: 'Routine',
+      ),
+      PresetTaskLine(
+        title: 'Go to bed',
+        startMin: 1395,
+        endMin: 330,
+        colorLabel: 'Routine',
+      ),
+    ];
+
 List<PresetTaskLine> builtinPresetLinesFor(PlannerPresetType preset) {
   switch (preset) {
     case PlannerPresetType.hustle:
@@ -1333,6 +1434,8 @@ List<PresetTaskLine> builtinPresetLinesFor(PlannerPresetType preset) {
       ];
     case PlannerPresetType.hustle530:
       return builtinHustle530Lines();
+    case PlannerPresetType.p530:
+      return builtinP530Lines();
     case PlannerPresetType.monk:
       return [
         PresetTaskLine(
@@ -16236,6 +16339,8 @@ String _presetLabel(PlannerPresetType p) {
       return 'Hustle Mode';
     case PlannerPresetType.hustle530:
       return '5:30AM Hustle';
+    case PlannerPresetType.p530:
+      return '5:30';
     case PlannerPresetType.monk:
       return 'Monk Mode';
     case PlannerPresetType.alltag:
