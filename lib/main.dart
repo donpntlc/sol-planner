@@ -3453,7 +3453,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                                 const SizedBox(width: 10),
                                 Expanded(
                                   child: Text(
-                                    'To do List',
+                                    'Aufgaben (Deep Work)',
                                     style: Theme.of(context)
                                         .textTheme
                                         .titleLarge
@@ -3472,6 +3472,45 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                                     height: 1.35,
                                   ),
                             ),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: TextField(
+                                    controller: addCtrl,
+                                    textInputAction: TextInputAction.done,
+                                    decoration: InputDecoration(
+                                      hintText: 'Neue Aufgabe …',
+                                      hintStyle: TextStyle(color: p.muted),
+                                      filled: true,
+                                      fillColor: p.bg.withValues(alpha: 0.35),
+                                      isDense: true,
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(14),
+                                        borderSide: BorderSide(
+                                          color: p.hairline,
+                                        ),
+                                      ),
+                                    ),
+                                    onSubmitted: (v) async {
+                                      await _addDeepWorkTodo(v);
+                                      addCtrl.clear();
+                                      refresh();
+                                    },
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                FilledButton(
+                                  onPressed: () async {
+                                    await _addDeepWorkTodo(addCtrl.text);
+                                    addCtrl.clear();
+                                    refresh();
+                                  },
+                                  child: const Icon(Icons.add_rounded),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
                             SwitchListTile(
                               contentPadding: EdgeInsets.zero,
                               title: const Text('In Deep Work anzeigen'),
@@ -3490,7 +3529,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                                   vertical: 18,
                                 ),
                                 child: Text(
-                                  'Noch keine Aufgaben. Füge unten den ersten Eintrag hinzu.',
+                                  'Noch keine Aufgaben. Oben die erste eintragen.',
                                   style: Theme.of(context).textTheme.bodyMedium
                                       ?.copyWith(color: p.muted),
                                 ),
@@ -3542,44 +3581,6 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                                   },
                                 ),
                               ),
-                            const SizedBox(height: 8),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: TextField(
-                                    controller: addCtrl,
-                                    textInputAction: TextInputAction.done,
-                                    decoration: InputDecoration(
-                                      hintText: 'Neue Aufgabe …',
-                                      hintStyle: TextStyle(color: p.muted),
-                                      filled: true,
-                                      fillColor: p.bg.withValues(alpha: 0.35),
-                                      isDense: true,
-                                      border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(14),
-                                        borderSide: BorderSide(
-                                          color: p.hairline,
-                                        ),
-                                      ),
-                                    ),
-                                    onSubmitted: (v) async {
-                                      await _addDeepWorkTodo(v);
-                                      addCtrl.clear();
-                                      refresh();
-                                    },
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                FilledButton(
-                                  onPressed: () async {
-                                    await _addDeepWorkTodo(addCtrl.text);
-                                    addCtrl.clear();
-                                    refresh();
-                                  },
-                                  child: const Icon(Icons.add_rounded),
-                                ),
-                              ],
-                            ),
                           ],
                         ),
                       ),
