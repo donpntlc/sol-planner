@@ -865,16 +865,31 @@ class PresetTaskLine {
 
 /// Nutzerdefinierter Preset-Tag (eigenes Raster, Name frei wählbar).
 class UserPresetDay {
-  UserPresetDay({required this.id, required this.name, required this.lines});
+  UserPresetDay({
+    required this.id,
+    required this.name,
+    required this.lines,
+    this.parentKey,
+    this.diff,
+  });
 
   final String id;
   final String name;
   final List<PresetTaskLine> lines;
 
+  /// Variante von diesem Preset (z. B. 'hustle530' oder 'u:<id>'); null = eigenständig.
+  final String? parentKey;
+
+  /// Was die Variante gegenüber dem Basis-Preset ändert (geänderte, entfernte, neue Blöcke).
+  final Map<String, dynamic>? diff;
+
+  bool get isVariant => parentKey != null && parentKey!.isNotEmpty;
+
   UserPresetDay copyWith({
     String? id,
     String? name,
     List<PresetTaskLine>? lines,
+    Map<String, dynamic>? diff,
   }) {
     return UserPresetDay(
       id: id ?? this.id,
@@ -882,6 +897,8 @@ class UserPresetDay {
       lines: lines != null
           ? List<PresetTaskLine>.from(lines.map((e) => e.copy()))
           : List<PresetTaskLine>.from(this.lines.map((e) => e.copy())),
+      parentKey: parentKey,
+      diff: diff ?? this.diff,
     );
   }
 
@@ -889,6 +906,8 @@ class UserPresetDay {
     'id': id,
     'name': name,
     'lines': lines.map((x) => x.toJson()).toList(),
+    if (isVariant) 'parent': parentKey,
+    if (isVariant && diff != null) 'diff': diff,
   };
 
   factory UserPresetDay.fromJson(Map<String, dynamic> j) {
@@ -901,14 +920,68 @@ class UserPresetDay {
           lines.add(PresetTaskLine.fromJson(item));
       }
     }
+    final parent = (j['parent'] as String?)?.trim();
     return UserPresetDay(
       id: id.isEmpty ? _newUserPresetDayIdStatic() : id,
       name: ((j['name'] as String?) ?? 'Preset').trim().isEmpty
           ? 'Preset'
           : ((j['name'] as String?) ?? '').trim(),
       lines: lines,
+      parentKey: parent == null || parent.isEmpty ? null : parent,
+      diff: j['diff'] is Map ? Map<String, dynamic>.from(j['diff'] as Map) : null,
     );
   }
+}
+
+/// Unterschied Variante ↔ Basis (Blöcke werden über den Titel zugeordnet).
+Map<String, dynamic> presetVariantDiff(
+  List<PresetTaskLine> base,
+  List<PresetTaskLine> variant,
+) {
+  final baseBy = {for (final l in base) l.title: l};
+  final varBy = {for (final l in variant) l.title: l};
+  final changed = <String, dynamic>{};
+  final added = <dynamic>[];
+  for (final v in variant) {
+    final b = baseBy[v.title];
+    if (b == null) {
+      added.add(v.toJson());
+    } else if (jsonEncode(b.toJson()) != jsonEncode(v.toJson())) {
+      changed[v.title] = v.toJson();
+    }
+  }
+  final removed = [
+    for (final b in base)
+      if (!varBy.containsKey(b.title)) b.title,
+  ];
+  return {'changed': changed, 'removed': removed, 'added': added};
+}
+
+/// Basis + Unterschied = Blöcke der Variante. Änderungen am Basis-Preset wirken mit.
+List<PresetTaskLine> applyPresetVariantDiff(
+  List<PresetTaskLine> base,
+  Map<String, dynamic>? diff,
+) {
+  if (diff == null) return [for (final l in base) l.copy()];
+  final changed = diff['changed'] is Map
+      ? Map<String, dynamic>.from(diff['changed'] as Map)
+      : const <String, dynamic>{};
+  final removed = {
+    for (final x in (diff['removed'] as List? ?? const [])) x.toString(),
+  };
+  final out = <PresetTaskLine>[];
+  for (final l in base) {
+    if (removed.contains(l.title)) continue;
+    final c = changed[l.title];
+    out.add(
+      c is Map ? PresetTaskLine.fromJson(Map<String, dynamic>.from(c)) : l.copy(),
+    );
+  }
+  for (final x in (diff['added'] as List? ?? const [])) {
+    if (x is Map) out.add(PresetTaskLine.fromJson(Map<String, dynamic>.from(x)));
+  }
+  out.sort((a, b) => a.startMin.compareTo(b.startMin));
+  return out;
 }
 
 String _newUserPresetDayIdStatic() =>
@@ -3536,6 +3609,12 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
             label: 'Tag als Preset speichern',
             sub: 'Aktuellen Plan als Vorlage übernehmen',
             onTap: _saveDayAsPresetSheet,
+          ),
+          (
+            icon: Icons.call_split_rounded,
+            label: 'Preset-Variante erstellen',
+            sub: 'z. B. 5:30 Sommer / Winter',
+            onTap: () => unawaited(_createPresetVariantFlow()),
           ),
           (
             icon: Icons.date_range_rounded,
@@ -6432,6 +6511,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
             _presetTaskOverrides[t] = lines;
           }
         }
+        _refreshPresetVariants();
       });
       // Einmalig (10.11.): im 5:30-Preset Morgen Routine 5:30–7:00, Deep Work 7:00–9:00.
       const migKey = 'planner_mig_530_morning_v1';
@@ -6697,6 +6777,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
         _userPresetDays
           ..clear()
           ..addAll(loaded);
+        _refreshPresetVariants();
         _sanitizeActivePresetKeyIfStale();
       });
     } catch (_) {}
@@ -6889,6 +6970,149 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
     return _presetLabel(p);
   }
 
+  /// Blöcke des Presets [key] (eingebaut, eigenes oder Variante).
+  List<PresetTaskLine> _linesForPresetKey(String key) {
+    final b = _tryBuiltinPresetKey(key);
+    if (b != null) return _effectivePresetLines(b);
+    return _userPresetForKey(key)?.lines ?? const <PresetTaskLine>[];
+  }
+
+  /// Varianten neu aus Basis + Unterschied zusammensetzen.
+  void _refreshPresetVariants() {
+    for (var i = 0; i < _userPresetDays.length; i++) {
+      final u = _userPresetDays[i];
+      if (!u.isVariant) continue;
+      final base = _linesForPresetKey(u.parentKey!);
+      if (base.isEmpty) continue;
+      if (u.diff == null) {
+        _userPresetDays[i] = u.copyWith(diff: presetVariantDiff(base, u.lines));
+      } else {
+        _userPresetDays[i] = u.copyWith(
+          lines: applyPresetVariantDiff(base, u.diff),
+        );
+      }
+    }
+  }
+
+  Future<void> _createPresetVariantFlow() async {
+    final bases = <({String key, String name})>[
+      for (final t in PlannerPresetType.values)
+        (key: t.name, name: _displayNameForBuiltinPreset(t)),
+      for (final u in _userPresetDays)
+        if (!u.isVariant) (key: 'u:${u.id}', name: u.name),
+    ];
+    final baseKey = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) {
+        final p = sheetCtx.palette;
+        return _sheetFrame(sheetCtx, [
+          Text(
+            'Variante erstellen',
+            style: TextStyle(
+              color: p.text,
+              fontWeight: FontWeight.w800,
+              fontSize: 20,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Gleicher Ablauf, kleine Unterschiede – z. B. 5:30 Sommer / Winter. '
+            'Was du in der Variante nicht änderst, folgt automatisch dem Basis-Preset.',
+            style: TextStyle(color: p.muted, height: 1.35),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Auf welchem Preset aufbauen?',
+            style: TextStyle(color: p.text, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 4),
+          ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.sizeOf(sheetCtx).height * 0.5,
+            ),
+            child: ListView(
+              shrinkWrap: true,
+              children: [
+                for (final b in bases)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(
+                      b.name,
+                      style: TextStyle(
+                        color: p.text,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    trailing: Icon(
+                      Icons.chevron_right_rounded,
+                      color: p.muted,
+                    ),
+                    onTap: () => Navigator.pop(sheetCtx, b.key),
+                  ),
+              ],
+            ),
+          ),
+        ]);
+      },
+    );
+    if (baseKey == null || !mounted) return;
+    final baseName = _displayNameForPresetKey(baseKey);
+    final ctrl = TextEditingController(text: '$baseName ');
+    final name = await showDialog<String>(
+      context: context,
+      builder: (dc) {
+        final p = dc.palette;
+        return AlertDialog(
+          backgroundColor: p.surface,
+          title: Text(
+            'Name der Variante',
+            style: TextStyle(color: p.text, fontWeight: FontWeight.w800),
+          ),
+          content: TextField(
+            controller: ctrl,
+            autofocus: true,
+            style: TextStyle(color: p.text),
+            decoration: InputDecoration(
+              hintText: 'z. B. $baseName Sommer',
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dc),
+              child: const Text('Abbrechen'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dc, ctrl.text.trim()),
+              child: const Text('Erstellen'),
+            ),
+          ],
+        );
+      },
+    );
+    if (name == null || name.isEmpty || !mounted) return;
+    final base = _linesForPresetKey(baseKey);
+    final id = _newUserPresetDayIdStatic();
+    setState(() {
+      _userPresetDays.add(
+        UserPresetDay(
+          id: id,
+          name: name,
+          lines: [for (final l in base) l.copy()],
+          parentKey: baseKey,
+          diff: const {'changed': {}, 'removed': [], 'added': []},
+        ),
+      );
+    });
+    await _saveUserPresetDays();
+    if (!mounted) return;
+    await _openPresetTaskTemplatesSheet(initialKey: 'u:$id');
+  }
+
   String _displayNameForPresetKey(String key) {
     if (key == _kIndividualDayPresetKey) return 'Individuell';
     final builtin = _tryBuiltinPresetKey(key);
@@ -7005,6 +7229,27 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
     }
   }
 
+  List<DropdownMenuItem<String>> _variantMenuItems(String parentKey) => [
+    for (final v in _userPresetDays)
+      if (v.parentKey == parentKey)
+        DropdownMenuItem<String>(
+          value: 'u:${v.id}',
+          child: Row(
+            children: [
+              Icon(
+                Icons.subdirectory_arrow_right_rounded,
+                size: 16,
+                color: context.palette.muted,
+              ),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(v.name, overflow: TextOverflow.ellipsis),
+              ),
+            ],
+          ),
+        ),
+  ];
+
   List<DropdownMenuItem<String>> _presetMenuItems() {
     final haupt = _resolvedActivePresetKey();
     return [
@@ -7015,7 +7260,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
           overflow: TextOverflow.ellipsis,
         ),
       ),
-      for (final pt in PlannerPresetType.values)
+      for (final pt in PlannerPresetType.values) ...[
         DropdownMenuItem<String>(
           value: pt.name,
           child: Text(
@@ -7023,14 +7268,26 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
             overflow: TextOverflow.ellipsis,
           ),
         ),
+        ..._variantMenuItems(pt.name),
+      ],
       for (final u in _userPresetDays)
-        DropdownMenuItem<String>(
-          value: 'u:${u.id}',
-          child: Text(
-            u.name.trim().isEmpty ? 'Eigenes Preset' : u.name.trim(),
-            overflow: TextOverflow.ellipsis,
+        if (!u.isVariant) ...[
+          DropdownMenuItem<String>(
+            value: 'u:${u.id}',
+            child: Text(
+              u.name.trim().isEmpty ? 'Eigenes Preset' : u.name.trim(),
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
-        ),
+          ..._variantMenuItems('u:${u.id}'),
+        ],
+      // Varianten, deren Basis es nicht mehr gibt.
+      for (final u in _userPresetDays)
+        if (u.isVariant && !_presetKeyIsValid(u.parentKey!))
+          DropdownMenuItem<String>(
+            value: 'u:${u.id}',
+            child: Text(u.name, overflow: TextOverflow.ellipsis),
+          ),
       DropdownMenuItem<String>(
         value: _kCreatePresetMenuValue,
         child: Text(
@@ -10619,7 +10876,7 @@ if (expanded && subTotal > 0) ...[
     }
   }
 
-  Future<void> _openPresetTaskTemplatesSheet() async {
+  Future<void> _openPresetTaskTemplatesSheet({String? initialKey}) async {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -10631,7 +10888,7 @@ if (expanded && subTotal > 0) ...[
           child: Align(
             alignment: Alignment.bottomCenter,
             child: _PresetTemplatesEditorSheet(
-              initialKey: _resolvedActivePresetKey(),
+              initialKey: initialKey ?? _resolvedActivePresetKey(),
               overrides: Map<PlannerPresetType, List<PresetTaskLine>>.from(
                 _presetTaskOverrides,
               ),
@@ -10643,12 +10900,30 @@ if (expanded && subTotal > 0) ...[
               categoryColors: Map<String, Color>.from(_categoryColors),
               onSaved: (merged, users, builtinNames) async {
                 if (!mounted) return;
+                // Für Varianten: eigene Änderungen gegenüber der ALTEN Basis merken.
+                final oldBase = <String, List<PresetTaskLine>>{
+                  for (final u in _userPresetDays)
+                    if (u.isVariant)
+                      u.id: [
+                        for (final l in _linesForPresetKey(u.parentKey!))
+                          l.copy(),
+                      ],
+                };
                 setState(() {
                   _presetTaskOverrides.clear();
                   _presetTaskOverrides.addAll(merged);
                   _userPresetDays
                     ..clear()
                     ..addAll(users);
+                  for (var i = 0; i < _userPresetDays.length; i++) {
+                    final u = _userPresetDays[i];
+                    final ob = oldBase[u.id];
+                    if (!u.isVariant || ob == null) continue;
+                    _userPresetDays[i] = u.copyWith(
+                      diff: presetVariantDiff(ob, u.lines),
+                    );
+                  }
+                  _refreshPresetVariants();
                   _builtinPresetDisplayOverrides
                     ..clear()
                     ..addAll(builtinNames);
