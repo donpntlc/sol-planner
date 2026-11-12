@@ -3098,6 +3098,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
   String _taskKey(String title) {
     var t = title.toLowerCase();
     if (t.contains('deep work') || t.contains('deepwork')) return 'deep work';
+    if (isProjectSessionTitle(title)) return 'circle';
     t = t.replaceAll(RegExp(r'[#·|+\-–_.,:!]'), ' ');
     t = t.replaceAll(RegExp(r'\b\d+\b'), ' ');
     return t.replaceAll(RegExp(r'\s+'), ' ').trim();
@@ -3236,6 +3237,12 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
             if (e is Map<String, dynamic>) DeepWorkTodoItem.fromJson(e),
         ].where((x) => x.id.isNotEmpty && x.title.isNotEmpty).toList();
       });
+      // Alte Listen der Circle-Blöcke (verschiedene Namen) zusammenlegen.
+      for (final k in out.keys.toList()) {
+        if (k != 'circle' && isProjectSessionTitle(k)) {
+          (out['circle'] ??= []).addAll(out.remove(k)!);
+        }
+      }
       if (!mounted) return;
       setState(() {
         _blockTasks
@@ -4623,6 +4630,18 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
   void _syncProjectRotationForBlock(TimeBlock b) {
     if (!_isProjectSessionBlock(b) || _projectRotation.isEmpty) return;
     final day = _onlyDay(_selectedDate);
+    if (b.completed && _openTasksFor('circle').isNotEmpty) {
+      // Erst die To-Dos: Circle bleibt stehen.
+      final next = _projectRotation.upcomingLabel();
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        SnackBar(
+          content: Text(
+            'To-Dos noch offen – der Circle bleibt${next == null ? '' : ' bei $next'}.',
+          ),
+        ),
+      );
+      return;
+    }
     setState(() {
       if (b.completed) {
         _projectRotation.markDone(day, b.id);
@@ -4635,10 +4654,15 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
 
   Widget _projectNextChip(BuildContext context, TimeBlock block, Color? ink) {
     final p = context.palette;
-    final name = _projectSessionLabel(block);
+    final todos = block.completed || _taskHostFor('circle')?.id != block.id
+        ? const <DeepWorkTodoItem>[]
+        : _openTasksFor('circle');
+    final name = todos.isNotEmpty ? null : _projectSessionLabel(block);
     final done = block.completed && name != null;
     final accent = ink ?? p.accent;
-    final label = name == null
+    final label = todos.isNotEmpty
+        ? 'To-Do · ${todos.first.title}${todos.length > 1 ? ' (+${todos.length - 1})' : ''}'
+        : name == null
         ? (_projectRotation.isEmpty ? 'Projekte festlegen' : 'Projekt Circle')
         : (done ? name : 'Als Nächstes · $name');
     return Align(
@@ -4647,7 +4671,9 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(99),
-          onTap: () => _openProjectSessionSheet(block),
+          onTap: () => todos.isNotEmpty
+              ? _openEditBlockDialog(block)
+              : _openProjectSessionSheet(block),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
@@ -4661,7 +4687,9 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
-                  done
+                  todos.isNotEmpty
+                      ? Icons.format_list_numbered_rounded
+                      : done
                       ? Icons.check_rounded
                       : (name == null
                             ? Icons.add_rounded
@@ -12074,7 +12102,7 @@ if (expanded && subTotal > 0) ...[
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Aufgaben',
+                      key == 'circle' ? 'To-Dos' : 'Aufgaben',
                       style: TextStyle(
                         color: p.text,
                         fontWeight: FontWeight.w800,
@@ -12092,7 +12120,9 @@ if (expanded && subTotal > 0) ...[
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      'Bleiben stehen und wandern in den nächsten „${titleCtrl.text.trim()}“-Block, bis du sie abhakst. Ziehen ändert die Reihenfolge.',
+                      key == 'circle'
+                          ? 'To-Dos für die Circle-Zeit (Mails, Dringendes …). Solange welche offen sind, stehen sie vorne und der Circle rückt nicht weiter.'
+                          : 'Bleiben stehen und wandern in den nächsten „${titleCtrl.text.trim()}“-Block, bis du sie abhakst. Ziehen ändert die Reihenfolge.',
                       style: TextStyle(color: p.muted, fontSize: 12, height: 1.35),
                     ),
                     const SizedBox(height: 8),
