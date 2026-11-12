@@ -5573,6 +5573,16 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
             _enrichMorningRoutine(b);
             if (pk == 'hustle530' || pk == 'p530') _update530Block(b);
           }
+          // Kommende 5:30-Tage, die noch mit dem ersten (falschen) Abend angelegt wurden,
+          // neu aus dem Preset bauen – nur wenn dort noch nichts abgehakt ist.
+          if (pk == 'p530' &&
+              day.isAfter(_onlyDay(DateTime.now())) &&
+              blocks.any((b) => b.title == 'Creative Time') &&
+              !blocks.any((b) => b.completed)) {
+            blocks
+              ..clear()
+              ..addAll(_buildPresetBlocksForKey('p530'));
+          }
         }
         parsedDays[day] = blocks;
         parsedKinds[day] = pk;
