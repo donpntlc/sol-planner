@@ -4775,60 +4775,135 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
 
   /// A/B-Varianten eines Circle-Projekts bearbeiten (z. B. Sprache → Portugiesisch / Serbisch).
   Future<List<String>?> _editCircleVariants(RotationProject item) async {
-    final ctrl = TextEditingController(text: item.variants.join(' / '));
-    final res = await showDialog<String>(
+    String letter(int i) => i < 26 ? String.fromCharCode(65 + i) : '${i + 1}';
+    final ctrls = <TextEditingController>[
+      for (final v in item.variants) TextEditingController(text: v),
+    ];
+    if (ctrls.isEmpty) {
+      ctrls.addAll([TextEditingController(), TextEditingController()]);
+    }
+    final res = await showModalBottomSheet<List<String>>(
       context: context,
-      builder: (dc) {
-        final p = dc.palette;
-        return AlertDialog(
-          backgroundColor: p.surface,
-          title: Text(
-            '${item.title}: abwechseln',
-            style: TextStyle(color: p.text, fontWeight: FontWeight.w800),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) => StatefulBuilder(
+        builder: (ctx, setL) {
+          final p = ctx.palette;
+          return Padding(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(sheetCtx).viewInsets.bottom,
+            ),
+            child: _sheetFrame(sheetCtx, [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '${item.title}: abwechseln',
+                      style: TextStyle(
+                        color: p.text,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 19,
+                      ),
+                    ),
+                  ),
+                  FilledButton(
+                    onPressed: () => Navigator.pop(sheetCtx, [
+                      for (var i = 0; i < ctrls.length; i++)
+                        ctrls[i].text.trim().isEmpty
+                            ? letter(i)
+                            : ctrls[i].text.trim(),
+                    ]),
+                    child: const Text('Fertig'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
               Text(
-                'Jedes Mal, wenn ${item.title} dran ist, kommt die nächste Variante. '
-                'Mit „/“ trennen, leer lassen = keine.',
+                'Jedes Mal, wenn ${item.title} dran ist, kommt die nächste Variante: A → B → C … '
+                'Namen sind optional (leer = nur der Buchstabe).',
                 style: TextStyle(color: p.muted, height: 1.35),
               ),
               const SizedBox(height: 12),
-              TextField(
-                controller: ctrl,
-                autofocus: true,
-                style: TextStyle(color: p.text),
-                decoration: InputDecoration(
-                  hintText: 'z. B. Portugiesisch / Serbisch',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
+              for (var i = 0; i < ctrls.length; i++)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 32,
+                        height: 32,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: p.accent.withValues(alpha: 0.16),
+                          border: Border.all(
+                            color: p.accent.withValues(alpha: 0.6),
+                          ),
+                        ),
+                        child: Text(
+                          letter(i),
+                          style: TextStyle(
+                            color: p.accent,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: TextField(
+                          controller: ctrls[i],
+                          style: TextStyle(color: p.text),
+                          decoration: InputDecoration(
+                            hintText: i == 0
+                                ? 'z. B. Portugiesisch (optional)'
+                                : 'optional',
+                            hintStyle: TextStyle(color: p.muted),
+                            isDense: true,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Entfernen',
+                        icon: Icon(Icons.close_rounded, color: p.muted),
+                        onPressed: () => setL(() => ctrls.removeAt(i)),
+                      ),
+                    ],
                   ),
                 ),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: () =>
+                      setL(() => ctrls.add(TextEditingController())),
+                  icon: const Icon(Icons.add_rounded),
+                  label: Text('Variante ${letter(ctrls.length)} hinzufügen'),
+                ),
               ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dc),
-              child: const Text('Abbrechen'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(dc, ctrl.text),
-              child: const Text('Speichern'),
-            ),
-          ],
-        );
-      },
+              if (item.hasVariants)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton(
+                    onPressed: () =>
+                        Navigator.pop(sheetCtx, const <String>[]),
+                    child: Text(
+                      'Abwechseln ausschalten',
+                      style: TextStyle(color: p.muted),
+                    ),
+                  ),
+                ),
+            ]),
+          );
+        },
+      ),
     );
+    for (final c in ctrls) {
+      c.dispose();
+    }
     if (res == null) return null;
-    final vs = res
-        .split(RegExp(r'[/|,]'))
-        .map((e) => e.trim())
-        .where((e) => e.isNotEmpty)
-        .toList();
-    return vs.length < 2 ? <String>[] : vs;
+    return res.length < 2 ? <String>[] : res;
   }
 
   void _showCircleInfo() {
@@ -5480,6 +5555,36 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                     height: 1.35,
                   ),
                 ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: addCtrl,
+                        focusNode: addFocus,
+                        textInputAction: TextInputAction.done,
+                        textCapitalization: TextCapitalization.sentences,
+                        decoration: InputDecoration(
+                          hintText: 'Neues Projekt …',
+                          hintStyle: TextStyle(color: p.muted),
+                          filled: true,
+                          fillColor: p.bg.withValues(alpha: 0.35),
+                          isDense: true,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide(color: p.hairline),
+                          ),
+                        ),
+                        onSubmitted: (_) => addFromField(),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton.filledTonal(
+                      onPressed: addFromField,
+                      icon: const Icon(Icons.add_rounded),
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 12),
                 FilledButton.icon(
                   onPressed: () {
@@ -5619,7 +5724,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                                     ),
                                   ),
                                   IconButton(
-                                    tooltip: 'A/B-Varianten',
+                                    tooltip: 'Abwechseln (A, B, C …)',
                                     icon: Icon(
                                       Icons.call_split_rounded,
                                       color: item.hasVariants
@@ -5664,36 +5769,6 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                       );
                     },
                   ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: addCtrl,
-                        focusNode: addFocus,
-                        textInputAction: TextInputAction.done,
-                        textCapitalization: TextCapitalization.sentences,
-                        decoration: InputDecoration(
-                          hintText: 'Neues Projekt … (oder Sprache: A / B)',
-                          hintStyle: TextStyle(color: p.muted),
-                          filled: true,
-                          fillColor: p.bg.withValues(alpha: 0.35),
-                          isDense: true,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(14),
-                            borderSide: BorderSide(color: p.hairline),
-                          ),
-                        ),
-                        onSubmitted: (_) => addFromField(),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    IconButton.filledTonal(
-                      onPressed: addFromField,
-                      icon: const Icon(Icons.add_rounded),
-                    ),
-                  ],
-                ),
               ]);
             },
           );
