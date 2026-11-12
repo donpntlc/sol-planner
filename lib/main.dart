@@ -9270,9 +9270,9 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
 
     final liveBorderPx = highlightCard ? (isLiveNow ? 2.35 : 1.85) : 1.4;
     // Innenradius ~ R−Stroke, etwas Überstand: Anti-Alias lässt sonst einen dünnen Spalt zwischen Rand und Streifen.
-    final innerClipRadiusLive = !mealVis
-        ? ((14.0 - liveBorderPx) + 1.05).clamp(6.5, 13.4)
-        : 14.0;
+    // Gilt auch für Mahlzeit-Blöcke (vorher 14 → sichtbare Lücke an Rundung/Rand).
+    final innerClipRadiusLive =
+        ((14.0 - liveBorderPx) + 1.05).clamp(6.5, 13.4);
 
     final Color borderLine = mealVis
         ? MealBlockTheme.outline.withValues(
