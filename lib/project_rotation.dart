@@ -8,16 +8,49 @@ const String kProjectRotationPrefKey = 'planner_project_rotation_v1';
 
 /// Ein Projekt in der Rotation (z. B. Programmieren, Klavier, Portugiesisch).
 class RotationProject {
-  RotationProject({required this.id, required this.title});
+  RotationProject({
+    required this.id,
+    required this.title,
+    List<String>? variants,
+    this.variantNext = 0,
+  }) : variants = variants ?? [];
 
   final String id;
   String title;
 
-  Map<String, dynamic> toJson() => {'id': id, 'title': title};
+  /// Abwechselnde Varianten (A/B …), z. B. Sprache → Portugiesisch, Serbisch.
+  final List<String> variants;
+
+  /// Welche Variante als Nächstes dran ist.
+  int variantNext;
+
+  bool get hasVariants => variants.isNotEmpty;
+
+  String variantAt(int offset) {
+    if (variants.isEmpty) return '';
+    final n = variants.length;
+    return variants[(((variantNext + offset) % n) + n) % n];
+  }
+
+  /// „Sprache · Portugiesisch“ bzw. nur der Titel.
+  String labelAt(int variantOffset) =>
+      hasVariants ? '$title · ${variantAt(variantOffset)}' : title;
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'title': title,
+    if (variants.isNotEmpty) 'variants': variants,
+    if (variants.isNotEmpty) 'variantNext': variantNext,
+  };
 
   factory RotationProject.fromJson(Map<String, dynamic> j) => RotationProject(
     id: ((j['id'] as String?) ?? '').trim(),
     title: ((j['title'] as String?) ?? '').trim(),
+    variants: [
+      for (final v in (j['variants'] as List? ?? const []))
+        if (v is String && v.trim().isNotEmpty) v.trim(),
+    ],
+    variantNext: (j['variantNext'] as num?)?.toInt() ?? 0,
   );
 }
 
@@ -33,9 +66,14 @@ class ProjectRotation {
     this.nextIndex = 0,
     Map<String, String>? assigned,
     Map<String, SessionNote>? notes,
+    Map<String, String>? assignedVariant,
   }) : items = items ?? [],
        assigned = assigned ?? {},
-       notes = notes ?? {};
+       notes = notes ?? {},
+       assignedVariant = assignedVariant ?? {};
+
+  /// `yyyy-mm-dd|blockId` → Variante, die in dieser Session dran war.
+  final Map<String, String> assignedVariant;
 
   final List<RotationProject> items;
   int nextIndex;
@@ -57,6 +95,39 @@ class ProjectRotation {
     return items[(_safeNext + offset) % items.length];
   }
 
+  /// Anzeige für die Session [offset] Sessions nach der nächsten (mit Variante).
+  String? upcomingLabel([int offset = 0]) {
+    final p = upcoming(offset);
+    if (p == null) return null;
+    if (!p.hasVariants) return p.title;
+    var before = 0;
+    for (var i = 0; i < offset; i++) {
+      if (items[(_safeNext + i) % items.length].id == p.id) before++;
+    }
+    return p.labelAt(before);
+  }
+
+  /// Anzeige für eine abgehakte Session.
+  String? doneLabel(DateTime day, String blockId) {
+    final k = keyFor(day, blockId);
+    final pid = assigned[k];
+    if (pid == null) return null;
+    final p = byId(pid);
+    if (p == null) return null;
+    final v = assignedVariant[k];
+    return v == null || v.isEmpty ? p.title : '${p.title} · $v';
+  }
+
+  /// Variante setzen: Text wie „Portugiesisch / Serbisch“ (leer = keine).
+  void setVariants(String id, List<String> vs) {
+    final p = byId(id);
+    if (p == null) return;
+    p.variants
+      ..clear()
+      ..addAll(vs.map((e) => e.trim()).where((e) => e.isNotEmpty));
+    p.variantNext = 0;
+  }
+
   RotationProject? byId(String id) {
     for (final p in items) {
       if (p.id == id) return p;
@@ -74,7 +145,12 @@ class ProjectRotation {
     if (items.isEmpty) return;
     final k = keyFor(day, blockId);
     if (assigned.containsKey(k)) return;
-    assigned[k] = items[_safeNext].id;
+    final cur = items[_safeNext];
+    assigned[k] = cur.id;
+    if (cur.hasVariants) {
+      assignedVariant[k] = cur.variantAt(0);
+      cur.variantNext = (cur.variantNext + 1) % cur.variants.length;
+    }
     final n = notes[k];
     if (n != null) notes[k] = SessionNote(projectId: assigned[k]!, text: n.text);
     nextIndex = (_safeNext + 1) % items.length;
@@ -85,15 +161,32 @@ class ProjectRotation {
   void markUndone(DateTime day, String blockId) {
     final k = keyFor(day, blockId);
     final pid = assigned.remove(k);
+    final v = assignedVariant.remove(k);
     if (pid == null || items.isEmpty) return;
     final prev = (_safeNext - 1 + items.length) % items.length;
-    if (items[prev].id == pid) nextIndex = prev;
+    if (items[prev].id == pid) {
+      nextIndex = prev;
+      final p = items[prev];
+      if (p.hasVariants && v != null) {
+        final i = p.variants.indexOf(v);
+        if (i >= 0) p.variantNext = i;
+      }
+    }
   }
 
+  /// „Klavier“ oder mit Varianten „Sprache: Portugiesisch / Serbisch“.
   void add(String title) {
-    final t = title.trim();
+    var t = title.trim();
     if (t.isEmpty) return;
-    items.add(RotationProject(id: _newId(), title: t));
+    var vs = <String>[];
+    final c = t.indexOf(':');
+    if (c > 0) {
+      vs = t.substring(c + 1).split(RegExp(r'[/|,]')).map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+      t = t.substring(0, c).trim();
+      if (vs.length < 2) vs = [];
+    }
+    if (t.isEmpty) return;
+    items.add(RotationProject(id: _newId(), title: t, variants: vs));
   }
 
   void remove(String id) {
@@ -181,6 +274,7 @@ class ProjectRotation {
     for (final k in keys.take(assigned.length - maxEntries)) {
       assigned.remove(k);
       notes.remove(k);
+      assignedVariant.remove(k);
     }
   }
 
@@ -189,6 +283,7 @@ class ProjectRotation {
     'nextIndex': nextIndex,
     'assigned': assigned,
     'notes': notes.map((k, v) => MapEntry(k, v.toJson())),
+    if (assignedVariant.isNotEmpty) 'av': assignedVariant,
   };
 
   factory ProjectRotation.fromJson(Map<String, dynamic> j) {
@@ -219,11 +314,19 @@ class ProjectRotation {
         }
       });
     }
+    final av = <String, String>{};
+    final rawV = j['av'];
+    if (rawV is Map) {
+      rawV.forEach((k, v) {
+        if (k is String && v is String) av[k] = v;
+      });
+    }
     return ProjectRotation(
       items: items,
       nextIndex: (j['nextIndex'] as num?)?.toInt() ?? 0,
       assigned: assigned,
       notes: notes,
+      assignedVariant: av,
     );
   }
 

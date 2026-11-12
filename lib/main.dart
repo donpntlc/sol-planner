@@ -3494,16 +3494,16 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
       if (!_projectRotation.isEmpty)
         (
           icon: Icons.play_circle_outline_rounded,
-          label: 'Jetzt: ${_projectRotation.upcoming()?.title ?? 'Circle'}',
+          label: 'Jetzt: ${_projectRotation.upcomingLabel() ?? 'Circle'}',
           sub: 'Nächstes aus dem Projekt Circle sofort starten',
           onTap: _startCircleNowSheet,
         ),
       (
         icon: Icons.autorenew_rounded,
         label: 'Projekt Circle',
-        sub: _projectRotation.upcoming()?.title == null
+        sub: _projectRotation.upcomingLabel() == null
             ? 'Projekte festlegen'
-            : 'Als Nächstes: ${_projectRotation.upcoming()!.title}',
+            : 'Als Nächstes: ${_projectRotation.upcomingLabel()!}',
         onTap: _openProjectRotationSheet,
       ),
       (
@@ -4534,10 +4534,80 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
         offset++;
       }
     }
+    _lastProjectOffset = offset;
     return _projectRotation.upcoming(offset);
   }
 
-  String? _projectSessionLabel(TimeBlock b) => _projectSessionProject(b)?.title;
+  /// A/B-Varianten eines Circle-Projekts bearbeiten (z. B. Sprache → Portugiesisch / Serbisch).
+  Future<List<String>?> _editCircleVariants(RotationProject item) async {
+    final ctrl = TextEditingController(text: item.variants.join(' / '));
+    final res = await showDialog<String>(
+      context: context,
+      builder: (dc) {
+        final p = dc.palette;
+        return AlertDialog(
+          backgroundColor: p.surface,
+          title: Text(
+            '${item.title}: abwechseln',
+            style: TextStyle(color: p.text, fontWeight: FontWeight.w800),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Jedes Mal, wenn ${item.title} dran ist, kommt die nächste Variante. '
+                'Mit „/“ trennen, leer lassen = keine.',
+                style: TextStyle(color: p.muted, height: 1.35),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: ctrl,
+                autofocus: true,
+                style: TextStyle(color: p.text),
+                decoration: InputDecoration(
+                  hintText: 'z. B. Portugiesisch / Serbisch',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dc),
+              child: const Text('Abbrechen'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dc, ctrl.text),
+              child: const Text('Speichern'),
+            ),
+          ],
+        );
+      },
+    );
+    if (res == null) return null;
+    final vs = res
+        .split(RegExp(r'[/|,]'))
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+    return vs.length < 2 ? <String>[] : vs;
+  }
+
+  int _lastProjectOffset = 0;
+
+  /// Name inkl. Variante („Sprache · Portugiesisch“).
+  String? _projectSessionLabel(TimeBlock b) {
+    if (_projectRotation.isEmpty) return null;
+    if (b.completed) {
+      return _projectRotation.doneLabel(_onlyDay(_selectedDate), b.id);
+    }
+    final p = _projectSessionProject(b);
+    if (p == null) return null;
+    return _projectRotation.upcomingLabel(_lastProjectOffset);
+  }
 
   /// Projekte in Circle-Reihenfolge, beginnend bei [from] (oder beim nächsten).
   List<RotationProject> _circleOrderFrom(RotationProject? from) {
@@ -4565,9 +4635,9 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
       await _openProjectRotationSheet();
       return;
     }
-    final next = _projectRotation.upcoming()?.title ?? 'Projekt';
+    final next = _projectRotation.upcomingLabel() ?? 'Projekt';
     final after = _projectRotation.items.length > 1
-        ? _projectRotation.upcoming(1)?.title
+        ? _projectRotation.upcomingLabel(1)
         : null;
     final picked = await showModalBottomSheet<int>(
       context: context,
@@ -5147,7 +5217,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                     },
                     icon: const Icon(Icons.play_arrow_rounded),
                     label: Text(
-                      'Jetzt starten: ${rot.upcoming()?.title ?? ''}',
+                      'Jetzt starten: ${rot.upcomingLabel() ?? ''}',
                     ),
                   ),
                 ],
@@ -5248,6 +5318,15 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                                             fontSize: 15,
                                           ),
                                         ),
+                                        if (item.hasVariants)
+                                          Text(
+                                            'Abwechselnd: ${item.variants.join(' / ')} · als Nächstes ${item.variantAt(0)}',
+                                            style: TextStyle(
+                                              color: p.accent,
+                                              fontSize: 12.5,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
                                         Text(
                                           'Zuletzt: ${lastDoneLabel(rot.lastDone(item.id))}',
                                           style: TextStyle(
@@ -5257,6 +5336,23 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                                         ),
                                       ],
                                     ),
+                                  ),
+                                  IconButton(
+                                    tooltip: 'A/B-Varianten',
+                                    icon: Icon(
+                                      Icons.call_split_rounded,
+                                      color: item.hasVariants
+                                          ? p.accent
+                                          : p.muted,
+                                    ),
+                                    onPressed: () async {
+                                      final vs = await _editCircleVariants(
+                                        item,
+                                      );
+                                      if (vs == null) return;
+                                      rot.setVariants(item.id, vs);
+                                      changed();
+                                    },
                                   ),
                                   IconButton(
                                     tooltip: 'Entfernen',
