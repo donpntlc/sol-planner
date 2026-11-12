@@ -1287,7 +1287,7 @@ List<PresetTaskLine> builtinP530Lines() => [
         colorLabel: 'Routine',
       ),
       PresetTaskLine(
-        title: 'Cyrcle block',
+        title: 'Cyrcle Block',
         startMin: 900,
         endMin: 960,
         colorLabel: 'Routine',
@@ -5571,7 +5571,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
         if (!day.isBefore(_onlyDay(DateTime.now()))) {
           for (final b in blocks) {
             _enrichMorningRoutine(b);
-            if (pk == 'hustle530') _update530Block(b);
+            if (pk == 'hustle530' || pk == 'p530') _update530Block(b);
           }
         }
         parsedDays[day] = blocks;
@@ -6399,6 +6399,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
 
   /// Bereits angelegte 5:30-Tage an Deans aktuellen 5:30-Plan angleichen.
   void _update530Block(TimeBlock b) {
+    if (b.title.trim() == 'Cyrcle block') b.title = 'Cyrcle Block';
     final t = b.title.trim();
     if ((t == 'Morgen Routine' || t == 'Pre-Workout + Get Ready for Gym') &&
         b.colorLabel == 'Routine' &&
@@ -9469,20 +9470,7 @@ Row(
                                             crossAxisAlignment:
                                                 CrossAxisAlignment.center,
                                             children: [
-                                              if (_isProjectSessionBlock(block))
-                                                Padding(
-                                                  padding: const EdgeInsets.only(
-                                                    right: 6,
-                                                  ),
-                                                  child: Icon(
-                                                    Icons.autorenew_rounded,
-                                                    size: tightPhone ? 17 : 18,
-                                                    color: activeLiveForeground
-                                                        ? liveInk
-                                                        : stripe,
-                                                  ),
-                                                ),
-                                              Expanded(
+                                              Flexible(
                                                 child: Text(
                                                   block.title,
                                                   maxLines: 2,
@@ -9545,6 +9533,20 @@ Row(
                                                       ),
                                                 ),
                                               ),
+                                              if (_isProjectSessionBlock(block))
+                                                Padding(
+                                                  padding: const EdgeInsets.only(
+                                                    left: 7,
+                                                  ),
+                                                  child: Icon(
+                                                    Icons.autorenew_rounded,
+                                                    size: tightPhone ? 17 : 18,
+                                                    color: activeLiveForeground
+                                                        ? liveInk
+                                                        : stripe,
+                                                  ),
+                                                ),
+                                              if (block.pinned) const Spacer(),
                                               if (block.pinned)
                                                 Padding(
                                                   padding:
