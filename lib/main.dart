@@ -1186,7 +1186,7 @@ List<PresetTaskLine> builtinHustle530Lines() => [
         colorLabel: 'Mahlzeit',
       ),
       PresetTaskLine(
-        title: 'Bibel Study 45min',
+        title: 'Bible Study 45min',
         startMin: 825,
         endMin: 885,
         colorLabel: 'Routine',
@@ -1281,7 +1281,7 @@ List<PresetTaskLine> builtinP530Lines() => [
         colorLabel: 'Mahlzeit',
       ),
       PresetTaskLine(
-        title: 'Bibel Study 45min',
+        title: 'Bible Study 45min',
         startMin: 825,
         endMin: 885,
         colorLabel: 'Routine',
@@ -6410,6 +6410,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
   /// Bereits angelegte 5:30-Tage an Deans aktuellen 5:30-Plan angleichen.
   void _update530Block(TimeBlock b) {
     if (b.title.trim() == 'Cyrcle block') b.title = 'Cyrcle Block';
+    if (b.title.trim() == 'Bibel Study 45min') b.title = 'Bible Study 45min';
     final t = b.title.trim();
     if ((t == 'Morgen Routine' || t == 'Pre-Workout + Get Ready for Gym') &&
         b.colorLabel == 'Routine' &&
@@ -6419,7 +6420,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
         b.title = 'Pre-Workout + Get Ready for GYM';
       }
     } else if (t == 'Bibel' && b.colorLabel == 'Wichtig') {
-      b.title = 'Bibel Study 45min';
+      b.title = 'Bible Study 45min';
       b.colorLabel = 'Routine';
     }
   }
