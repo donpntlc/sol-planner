@@ -1391,7 +1391,7 @@ List<PresetTaskLine> builtinP530Lines() => [
       ),
       PresetTaskLine(
         title: 'Go to bed',
-        startMin: 1380,
+        startMin: 1395,
         endMin: 330,
         colorLabel: 'Routine',
       ),
@@ -9003,9 +9003,24 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
     final railW = tightPhone ? 28.0 : 33.0;
     final gapAfterRail = tightPhone ? 7.0 : 9.0;
     final compact = h < 64;
-    final faint = p.muted.withValues(alpha: p.isDark ? 0.16 : 0.22);
-    final wash = p.muted.withValues(alpha: p.isDark ? 0.028 : 0.04);
-    final stroke = p.muted.withValues(alpha: p.isDark ? 0.08 : 0.12);
+    // Jetzt gerade frei? Dann Lücke hervorheben + Jetzt-Linie.
+    final now = DateTime.now();
+    final nowMin = now.hour * 60 + now.minute;
+    final isNow = _onlyDay(_selectedDate) == _onlyDay(now) &&
+        nowMin >= startMin &&
+        nowMin < endMin;
+    final nowFrac = isNow
+        ? ((nowMin - startMin) / max(1, endMin - startMin)).clamp(0.0, 1.0)
+        : 0.0;
+    final faint = isNow
+        ? p.text.withValues(alpha: 0.85)
+        : p.muted.withValues(alpha: p.isDark ? 0.16 : 0.22);
+    final wash = isNow
+        ? p.accent.withValues(alpha: p.isDark ? 0.07 : 0.09)
+        : p.muted.withValues(alpha: p.isDark ? 0.028 : 0.04);
+    final stroke = isNow
+        ? p.accent.withValues(alpha: 0.6)
+        : p.muted.withValues(alpha: p.isDark ? 0.08 : 0.12);
 
     return Material(
       color: Colors.transparent,
@@ -9040,9 +9055,63 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                     decoration: BoxDecoration(
                       color: wash,
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: stroke),
+                      border: Border.all(
+                        color: stroke,
+                        width: isNow ? 1.6 : 1,
+                      ),
+                      boxShadow: isNow
+                          ? [
+                              BoxShadow(
+                                color: p.accent.withValues(alpha: 0.22),
+                                blurRadius: 14,
+                                spreadRadius: 0.5,
+                              ),
+                            ]
+                          : null,
                     ),
-                    child: Padding(
+                    child: Stack(
+                      children: [
+                        if (isNow)
+                          Positioned(
+                            left: 0,
+                            right: 0,
+                            top: (h - 4) * nowFrac,
+                            child: IgnorePointer(
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: 8,
+                                    height: 8,
+                                    margin: const EdgeInsets.only(left: 6),
+                                    decoration: BoxDecoration(
+                                      color: p.accent,
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: Container(
+                                      height: 1.6,
+                                      color: p.accent.withValues(alpha: 0.75),
+                                    ),
+                                  ),
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                    ),
+                                    child: Text(
+                                      _fmtMin(nowMin),
+                                      style: TextStyle(
+                                        color: p.accent,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        Padding(
                       padding: EdgeInsets.fromLTRB(
                         14,
                         compact ? 6 : 10,
@@ -9053,7 +9122,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                         alignment: Alignment.centerLeft,
                         child: compact
                             ? Text(
-                                'Freizeit',
+                                isNow ? 'Jetzt frei' : 'Freizeit',
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: Theme.of(context).textTheme.titleMedium
@@ -9069,7 +9138,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Freizeit',
+                              isNow ? 'Jetzt frei' : 'Freizeit',
                               style: Theme.of(context).textTheme.titleMedium
                                   ?.copyWith(
                                     fontSize: tightPhone ? 15 : 16,
@@ -9084,7 +9153,9 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                               children: [
                                 Flexible(
                                   child: Text(
-                                    'Genieß deinen Tag',
+                                    isNow
+                                        ? 'noch ${_humanDuration(endMin - nowMin)} bis ${endMin >= 1440 ? '24:00' : _fmtMin(endMin)}'
+                                        : 'Genieß deinen Tag',
                                     style: Theme.of(context)
                                         .textTheme
                                         .bodySmall
@@ -9107,6 +9178,8 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                           ],
                         ),
                       ),
+                    ),
+                      ],
                     ),
                   ),
                 ),
