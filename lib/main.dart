@@ -1305,21 +1305,9 @@ List<PresetTaskLine> builtinP530Lines() => [
         colorLabel: 'Fokus',
       ),
       PresetTaskLine(
-        title: 'Deep Work 2',
-        startMin: 1140,
-        endMin: 1250,
-        colorLabel: 'Fokus',
-      ),
-      PresetTaskLine(
-        title: 'Creative Time',
-        startMin: 1250,
-        endMin: 1340,
-        colorLabel: 'Fokus',
-      ),
-      PresetTaskLine(
         title: 'Evening Meal',
-        startMin: 1340,
-        endMin: 1360,
+        startMin: 1260,
+        endMin: 1290,
         colorLabel: 'Mahlzeit',
       ),
       PresetTaskLine(
