@@ -2239,6 +2239,9 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
 
   /// Ausgeschaltete Funktionen (Standard: alles an).
   final Set<String> _featuresOff = <String>{};
+
+  /// Block verlängert und überschneidet den nächsten: 'ask' | 'cut' | 'push'.
+  String _overlapMode = 'ask';
   bool _featOn(String id) => !_featuresOff.contains(id);
 
   /// Projekt-Rotation für „Projekt-Session“-Blöcke.
@@ -3155,6 +3158,10 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
         _featuresOff
           ..clear()
           ..addAll([for (final x in d['off'] as List) if (x is String) x]);
+        final om = d['overlap'];
+        if (om is String && (om == 'ask' || om == 'cut' || om == 'push')) {
+          _overlapMode = om;
+        }
       });
     } catch (_) {}
   }
@@ -3164,11 +3171,13 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(
         _kFeatureTogglesPrefKey,
-        jsonEncode({'off': _featuresOff.toList()}),
+        jsonEncode({'off': _featuresOff.toList(), 'overlap': _overlapMode}),
       );
     } catch (_) {}
     solNotifyPlannerDiskDataChanged();
   }
+
+  Future<void> _saveOverlapMode() => _saveFeatureToggles();
 
   Future<void> _openFeaturesSheet() async {
     await showModalBottomSheet<void>(
@@ -3216,6 +3225,26 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                   unawaited(_saveFeatureToggles());
                 },
               ),
+            const SizedBox(height: 14),
+            Text(
+              'Block verlängert und überschneidet den nächsten',
+              style: TextStyle(color: p.text, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 8),
+            SegmentedButton<String>(
+              segments: const [
+                ButtonSegment(value: 'ask', label: Text('Fragen')),
+                ButtonSegment(value: 'cut', label: Text('Kürzen')),
+                ButtonSegment(value: 'push', label: Text('Verschieben')),
+              ],
+              selected: {_overlapMode},
+              showSelectedIcon: false,
+              onSelectionChanged: (v) {
+                setState(() => _overlapMode = v.first);
+                setLocal(() {});
+                unawaited(_saveFeatureToggles());
+              },
+            ),
           ]);
         },
       ),
@@ -11548,49 +11577,141 @@ if (expanded && subTotal > 0) ...[
               if (!context.mounted) {
                 stealFromNextMin = 0;
               } else {
-                final yn = await showDialog<bool>(
-                  context: context,
-                  builder: (ctx) {
-                    final p2 = ctx.palette;
-                    final nt = nxt.title.trim().isEmpty
-                        ? '(ohne Titel)'
-                        : nxt.title.trim();
-                    return AlertDialog(
-                      title: Text(
-                        'Aus „$nt“ abziehen?',
-                        style: Theme.of(ctx).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      content: Text(
-                        'Dein Block geht bis ${_fmtMin(em)} und schneidet den '
-                        'nächsten Zeitblock ab ${_fmtMin(nxt.startMin)}. '
-                        'Sollen dafür $stealFromNextMin Min von der Dauer von '
-                        '„$nt“ abgezogen werden (${_fmtMin(nxt.startMin)}–'
-                        '${_fmtMin(nxt.endMin)} beginnt danach später)?',
-                        style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(
-                          color: p2.text.withValues(alpha: 0.92),
-                          height: 1.35,
-                        ),
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(ctx, false),
-                          child: Text(
-                            'Nein',
-                            style: TextStyle(color: p2.muted),
+                var mode = _overlapMode;
+                if (mode == 'ask') {
+                  var remember = false;
+                  final picked = await showDialog<String>(
+                    context: context,
+                    builder: (ctx) {
+                      final p2 = ctx.palette;
+                      final nt = nxt.title.trim().isEmpty
+                          ? '(ohne Titel)'
+                          : nxt.title.trim();
+                      Widget opt(
+                        String value,
+                        IconData icon,
+                        String title,
+                        String sub,
+                      ) => Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Material(
+                          color: p2.hintBg,
+                          borderRadius: BorderRadius.circular(14),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(14),
+                            onTap: () => Navigator.pop(ctx, value),
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(
+                                14,
+                                12,
+                                12,
+                                12,
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(icon, color: p2.accent),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          title,
+                                          style: TextStyle(
+                                            color: p2.text,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                        Text(
+                                          sub,
+                                          style: TextStyle(
+                                            color: p2.muted,
+                                            fontSize: 12.5,
+                                            height: 1.3,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ),
                         ),
-                        FilledButton(
-                          onPressed: () => Navigator.pop(ctx, true),
-                          child: const Text('Ja'),
+                      );
+                      return StatefulBuilder(
+                        builder: (ctx, setD) => AlertDialog(
+                          backgroundColor: p2.surface,
+                          title: Text(
+                            'Überschneidet sich mit „$nt“',
+                            style: TextStyle(
+                              color: p2.text,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 18,
+                            ),
+                          ),
+                          content: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Text(
+                                'Dein Block geht jetzt bis ${_fmtMin(em)}, „$nt“ beginnt um ${_fmtMin(nxt.startMin)}.',
+                                style: TextStyle(color: p2.muted, height: 1.35),
+                              ),
+                              const SizedBox(height: 12),
+                              opt(
+                                'cut',
+                                Icons.content_cut_rounded,
+                                '„$nt“ kürzen',
+                                'Beginnt um ${_fmtMin(em)}, endet wie bisher – der Rest des Tages bleibt.',
+                              ),
+                              opt(
+                                'push',
+                                Icons.south_rounded,
+                                'Alles danach verschieben',
+                                'Folgende Blöcke rutschen nach hinten, bis eine Lücke den Platz auffängt.',
+                              ),
+                              CheckboxListTile(
+                                contentPadding: EdgeInsets.zero,
+                                dense: true,
+                                controlAffinity:
+                                    ListTileControlAffinity.leading,
+                                value: remember,
+                                onChanged: (v) =>
+                                    setD(() => remember = v ?? false),
+                                title: Text(
+                                  'Immer so machen (änderbar unter Ein- & ausblenden)',
+                                  style: TextStyle(
+                                    color: p2.muted,
+                                    fontSize: 12.5,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(ctx),
+                              child: Text(
+                                'Abbrechen',
+                                style: TextStyle(color: p2.muted),
+                              ),
+                            ),
+                          ],
                         ),
-                      ],
-                    );
-                  },
-                );
-                if (!mounted) return;
-                if (yn == true) {
+                      );
+                    },
+                  );
+                  if (!mounted) return;
+                  if (picked == null) return;
+                  mode = picked;
+                  if (remember) {
+                    _overlapMode = picked;
+                    unawaited(_saveOverlapMode());
+                  }
+                }
+                if (mode == 'cut') {
                   stealFromBlock = nxt;
                 } else {
                   stealFromNextMin = 0;
