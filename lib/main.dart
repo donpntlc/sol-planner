@@ -6970,8 +6970,8 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
     return _presetLabel(p);
   }
 
-  /// Blöcke des Presets [key] (eingebaut, eigenes oder Variante).
-  List<PresetTaskLine> _linesForPresetKey(String key) {
+  /// Blöcke des Presets [key] (eingebaut, eigenes oder Variante); leer, wenn es das nicht gibt.
+  List<PresetTaskLine> _variantBaseLines(String key) {
     final b = _tryBuiltinPresetKey(key);
     if (b != null) return _effectivePresetLines(b);
     return _userPresetForKey(key)?.lines ?? const <PresetTaskLine>[];
@@ -6982,7 +6982,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
     for (var i = 0; i < _userPresetDays.length; i++) {
       final u = _userPresetDays[i];
       if (!u.isVariant) continue;
-      final base = _linesForPresetKey(u.parentKey!);
+      final base = _variantBaseLines(u.parentKey!);
       if (base.isEmpty) continue;
       if (u.diff == null) {
         _userPresetDays[i] = u.copyWith(diff: presetVariantDiff(base, u.lines));
@@ -7095,7 +7095,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
       },
     );
     if (name == null || name.isEmpty || !mounted) return;
-    final base = _linesForPresetKey(baseKey);
+    final base = _variantBaseLines(baseKey);
     final id = _newUserPresetDayIdStatic();
     setState(() {
       _userPresetDays.add(
@@ -10905,7 +10905,7 @@ if (expanded && subTotal > 0) ...[
                   for (final u in _userPresetDays)
                     if (u.isVariant)
                       u.id: [
-                        for (final l in _linesForPresetKey(u.parentKey!))
+                        for (final l in _variantBaseLines(u.parentKey!))
                           l.copy(),
                       ],
                 };
