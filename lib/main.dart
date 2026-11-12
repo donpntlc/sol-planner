@@ -1050,6 +1050,8 @@ const Map<String, String> kPresetBlockNotes = {
   'shower post workout': """## Ablauf
 • Elektrolyte
 • Magerquark aus dem TK in den Kühlschrank
+• Wäsche waschen (Trainingskleidung)
+• Handtuch aufhängen
 
 ## Warme Dusche = Entspannung & Recovery
 • Muskeln – entspannen sich
@@ -1083,13 +1085,31 @@ const Map<String, String> kPresetBlockNotes = {
   'abendroutine': """## Vor dem Schlafen
 • 15 min Bibel
 • Wohnung ordentlich hinterlassen
-• Klamotten für morgen rauslegen""",
+• Klamotten für morgen rauslegen
+
+## Gymtasche packen (für morgen)
+• Frische Boxershorts
+• Trainingskleidung in die Tasche
+• Frisches Handtuch (wenn nötig)""",
   'go to bed': """• 6 h Schlaf = top
 • Ab 23:15 ins Bett, ab 23:30 schlafen""",
 };
 
 /// Frühere Fassungen der Preset-Texte (werden automatisch aktualisiert).
 const Set<String> _kOldPresetBlockNotes = {
+  """## Ablauf
+• Elektrolyte
+• Magerquark aus dem TK in den Kühlschrank
+
+## Warme Dusche = Entspannung & Recovery
+• Muskeln – entspannen sich
+• Recovery – indirekt hilfreich für Muskelaufbau
+• Stress – Cortisol runter
+• Schlaf – oft besser (wenn abends)""",
+  """## Vor dem Schlafen
+• 15 min Bibel
+• Wohnung ordentlich hinterlassen
+• Klamotten für morgen rauslegen""",
   """## Vorher: kurze Pause + Snack
 • 2x Black Tea (2 Beutel je Tasse) – 50–150 mg Koffein, ideal für stabile Konzentration (nur wenn nötig)
 • Snack – z. B. Magerquark-Shake + einfache Carbs
