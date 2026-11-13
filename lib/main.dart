@@ -6,6 +6,7 @@ import 'dart:ui' show FontFeature, PlatformDispatcher;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -314,6 +315,15 @@ class _DayPlannerAppState extends State<DayPlannerApp> {
       scrollBehavior: const _BouncyScrollBehavior(),
       debugShowCheckedModeBanner: false,
       title: 'SOL - Planer',
+      // Datum/Uhrzeit-Auswahl, Wochentage usw. auf Deutsch; bei englischem Handy auf Englisch.
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: const [Locale('de'), Locale('en')],
+      localeResolutionCallback: (device, supported) =>
+          device?.languageCode == 'en' ? const Locale('en') : const Locale('de'),
       theme: _buildPlannerTheme(AppPalette.light, Brightness.light),
       darkTheme: _buildPlannerTheme(AppPalette.dark, Brightness.dark),
       themeMode: _themeMode,
