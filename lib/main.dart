@@ -2142,6 +2142,8 @@ const int _kMaxUndoSteps = 30;
 /// Pro Tag: welches Preset dem Plan zugrunde liegt, oder angepasster **Individuell**‑Modus.
 const String _kIndividualDayPresetKey = '__individual__';
 const String _kCreatePresetMenuValue = '__create_preset__';
+const String _kArchiveMenuValue = '__preset_archive__';
+const String _kArchivedPresetsPrefKey = 'planner_archived_presets_v1';
 const String _kHauptplanMenuValue = '__hauptplan__';
 
 class _PlannerUndoSnapshot {
@@ -2239,6 +2241,178 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
 
   /// Ausgeschaltete Funktionen (Standard: alles an).
   final Set<String> _featuresOff = <String>{};
+
+  /// Archivierte Presets (Keys wie 'monk' oder 'u:<id>'): tauchen in der Auswahl nicht auf.
+  final Set<String> _archivedPresets = <String>{};
+
+  bool _presetArchived(String key) {
+    if (_archivedPresets.contains(key)) return true;
+    final u = _userPresetForKey(key);
+    return u != null && u.isVariant && _archivedPresets.contains(u.parentKey);
+  }
+
+  Future<void> _loadArchivedPresets() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_kArchivedPresetsPrefKey);
+      if (raw == null || raw.isEmpty || !mounted) return;
+      final d = jsonDecode(raw);
+      if (d is! List) return;
+      setState(() {
+        _archivedPresets
+          ..clear()
+          ..addAll([for (final x in d) if (x is String) x]);
+      });
+    } catch (_) {}
+  }
+
+  Future<void> _saveArchivedPresets() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        _kArchivedPresetsPrefKey,
+        jsonEncode(_archivedPresets.toList()),
+      );
+    } catch (_) {}
+    solNotifyPlannerDiskDataChanged();
+  }
+
+  Future<void> _openPresetArchiveSheet() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) => StatefulBuilder(
+        builder: (ctx, setL) {
+          final p = ctx.palette;
+          final rows = <({String key, String name, bool variant})>[
+            for (final t in PlannerPresetType.values) ...[
+              (key: t.name, name: _displayNameForBuiltinPreset(t), variant: false),
+              for (final v in _userPresetDays)
+                if (v.parentKey == t.name)
+                  (key: 'u:${v.id}', name: v.name, variant: true),
+            ],
+            for (final u in _userPresetDays)
+              if (!u.isVariant) ...[
+                (key: 'u:${u.id}', name: u.name, variant: false),
+                for (final v in _userPresetDays)
+                  if (v.parentKey == 'u:${u.id}')
+                    (key: 'u:${v.id}', name: v.name, variant: true),
+              ],
+          ];
+          final haupt = _resolvedActivePresetKey();
+          Widget row(({String key, String name, bool variant}) r) {
+            final archived = _archivedPresets.contains(r.key);
+            final parentArchived = _presetArchived(r.key) && !archived;
+            final isHaupt = r.key == haupt;
+            return Padding(
+              padding: EdgeInsets.only(left: r.variant ? 22 : 0),
+              child: ListTile(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                dense: true,
+                leading: Icon(
+                  r.variant
+                      ? Icons.subdirectory_arrow_right_rounded
+                      : (archived
+                            ? Icons.inventory_2_outlined
+                            : Icons.view_day_outlined),
+                  color: archived || parentArchived ? p.muted : p.accent,
+                ),
+                title: Text(
+                  r.name,
+                  style: TextStyle(
+                    color: archived || parentArchived
+                        ? p.muted
+                        : p.text,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                subtitle: isHaupt
+                    ? Text('Hauptplan', style: TextStyle(color: p.accent))
+                    : parentArchived
+                    ? Text(
+                        'Mit dem Basis-Preset archiviert',
+                        style: TextStyle(color: p.muted),
+                      )
+                    : null,
+                trailing: isHaupt
+                    ? null
+                    : TextButton(
+                        onPressed: parentArchived
+                            ? null
+                            : () {
+                                setState(() {
+                                  if (archived) {
+                                    _archivedPresets.remove(r.key);
+                                  } else {
+                                    _archivedPresets.add(r.key);
+                                  }
+                                });
+                                setL(() {});
+                                unawaited(_saveArchivedPresets());
+                              },
+                        child: Text(
+                          archived ? 'Zurückholen' : 'Archivieren',
+                          style: TextStyle(
+                            color: archived ? p.accent : p.muted,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+              ),
+            );
+          }
+
+          final active = rows.where((r) => !_presetArchived(r.key)).toList();
+          final arch = rows.where((r) => _presetArchived(r.key)).toList();
+          Widget head(String t) => Padding(
+            padding: const EdgeInsets.fromLTRB(4, 14, 4, 4),
+            child: Text(
+              t,
+              style: TextStyle(
+                color: p.muted,
+                fontSize: 11.5,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.2,
+              ),
+            ),
+          );
+          return _sheetFrame(sheetCtx, [
+            Text(
+              'Presets verwalten',
+              style: TextStyle(
+                color: p.text,
+                fontWeight: FontWeight.w800,
+                fontSize: 20,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Archivierte Presets verschwinden aus der Auswahl, bleiben aber gespeichert. '
+              'Zurückholen geht jederzeit hier.',
+              style: TextStyle(color: p.muted, height: 1.35),
+            ),
+            ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.sizeOf(sheetCtx).height * 0.6,
+              ),
+              child: ListView(
+                shrinkWrap: true,
+                children: [
+                  head('IN BENUTZUNG'),
+                  for (final r in active) row(r),
+                  if (arch.isNotEmpty) ...[
+                    head('ARCHIV'),
+                    for (final r in arch) row(r),
+                  ],
+                ],
+              ),
+            ),
+          ]);
+        },
+      ),
+    );
+  }
 
   /// Block verlängert und überschneidet den nächsten: 'ask' | 'cut' | 'push'.
   String _overlapMode = 'ask';
@@ -3652,6 +3826,12 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
             label: 'Preset-Variante erstellen',
             sub: 'z. B. 5:30 Sommer / Winter',
             onTap: () => unawaited(_createPresetVariantFlow()),
+          ),
+          (
+            icon: Icons.inventory_2_outlined,
+            label: 'Presets verwalten',
+            sub: 'Nicht genutzte ins Archiv packen',
+            onTap: () => unawaited(_openPresetArchiveSheet()),
           ),
           (
             icon: Icons.date_range_rounded,
@@ -6365,6 +6545,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
     Future<void>.microtask(_loadDeepWorkTodos);
     Future<void>.microtask(_loadBlockTasks);
     Future<void>.microtask(_loadFeatureToggles);
+    Future<void>.microtask(_loadArchivedPresets);
     Future<void>.microtask(_loadProjectRotation);
     Future<void>.microtask(_loadMacroPlan);
     Future<void>.microtask(_loadDayGridView);
@@ -7389,9 +7570,13 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
     }
   }
 
-  List<DropdownMenuItem<String>> _variantMenuItems(String parentKey) => [
+  List<DropdownMenuItem<String>> _variantMenuItems(
+    String parentKey, {
+    String? keep,
+  }) => [
     for (final v in _userPresetDays)
-      if (v.parentKey == parentKey)
+      if (v.parentKey == parentKey &&
+          (!_presetArchived('u:${v.id}') || 'u:${v.id}' == keep))
         DropdownMenuItem<String>(
           value: 'u:${v.id}',
           child: Row(
@@ -7410,8 +7595,10 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
         ),
   ];
 
-  List<DropdownMenuItem<String>> _presetMenuItems() {
+  List<DropdownMenuItem<String>> _presetMenuItems({String? keep}) {
     final haupt = _resolvedActivePresetKey();
+    bool show(String k) => !_presetArchived(k) || k == keep || k == haupt;
+    final archivedCount = _archivedPresets.length;
     return [
       DropdownMenuItem<String>(
         value: _kHauptplanMenuValue,
@@ -7421,25 +7608,27 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
         ),
       ),
       for (final pt in PlannerPresetType.values) ...[
-        DropdownMenuItem<String>(
-          value: pt.name,
-          child: Text(
-            _displayNameForBuiltinPreset(pt),
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-        ..._variantMenuItems(pt.name),
-      ],
-      for (final u in _userPresetDays)
-        if (!u.isVariant) ...[
+        if (show(pt.name))
           DropdownMenuItem<String>(
-            value: 'u:${u.id}',
+            value: pt.name,
             child: Text(
-              u.name.trim().isEmpty ? 'Eigenes Preset' : u.name.trim(),
+              _displayNameForBuiltinPreset(pt),
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          ..._variantMenuItems('u:${u.id}'),
+        ..._variantMenuItems(pt.name, keep: keep),
+      ],
+      for (final u in _userPresetDays)
+        if (!u.isVariant) ...[
+          if (show('u:${u.id}'))
+            DropdownMenuItem<String>(
+              value: 'u:${u.id}',
+              child: Text(
+                u.name.trim().isEmpty ? 'Eigenes Preset' : u.name.trim(),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ..._variantMenuItems('u:${u.id}', keep: keep),
         ],
       // Varianten, deren Basis es nicht mehr gibt.
       for (final u in _userPresetDays)
@@ -7457,6 +7646,28 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
             fontWeight: FontWeight.w700,
             color: context.palette.text,
           ),
+        ),
+      ),
+      DropdownMenuItem<String>(
+        value: _kArchiveMenuValue,
+        child: Row(
+          children: [
+            Icon(
+              Icons.inventory_2_outlined,
+              size: 17,
+              color: context.palette.muted,
+            ),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                archivedCount == 0
+                    ? 'Presets verwalten / archivieren'
+                    : 'Archiv ($archivedCount) & verwalten',
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: context.palette.muted),
+              ),
+            ),
+          ],
         ),
       ),
     ];
@@ -7664,9 +7875,16 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                 overflow: TextOverflow.ellipsis,
                 style: hintStyle,
               ),
-              items: _presetMenuItems(),
+              items: _presetMenuItems(keep: value),
               onChanged: (v) {
                 if (v == null) return;
+                if (v == _kArchiveMenuValue) {
+                  dismissHostingOverlay?.call();
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted) unawaited(_openPresetArchiveSheet());
+                  });
+                  return;
+                }
                 void runPick(String key) {
                   dismissHostingOverlay?.call();
                   WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -15842,9 +16060,10 @@ if (expanded && subTotal > 0) ...[
                     DropdownButtonFormField<String>(
                       value: selectedPresetKey,
                       dropdownColor: context.palette.surface,
-                      items: _presetMenuItems(),
+                      items: _presetMenuItems(keep: selectedPresetKey),
                       onChanged: (v) {
                         if (v == null) return;
+                        if (v == _kArchiveMenuValue) return;
                         if (v == _kCreatePresetMenuValue) {
                           unawaited(() async {
                             final key = await _promptAndCreateUserPreset();
