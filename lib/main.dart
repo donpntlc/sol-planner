@@ -11729,6 +11729,112 @@ if (expanded && subTotal > 0) ...[
       n.isLinearSlot && !n.pinned && !n.allDay && !n.isOvernightSlot;
 
   /// Nimmt höchstens [overlap] Min beim Folgeblock, lässt mindestens 15 Min dort übrig.
+  /// Änderung eines Blocks ins Preset des Tages und in alle kommenden Tage übernehmen.
+  Future<void> _applyBlockToAll({
+    required String origTitle,
+    required TimeBlock b,
+    required String? presetKey,
+  }) async {
+    PresetTaskLine lineOf(TimeBlock x) => PresetTaskLine(
+      title: x.title,
+      startMin: x.startMin,
+      endMin: x.endMin,
+      colorLabel: x.colorLabel,
+      notes: x.notes,
+      stripeHex: x.customStripeHex,
+      iconCode: x.customIconCodePoint,
+      subtasks: [for (final st in x.subtasks) st.title],
+    );
+    List<PresetTaskLine> merged(List<PresetTaskLine> cur) {
+      final out = [for (final l in cur) l.copy()];
+      final i = out.indexWhere((l) => l.title == origTitle);
+      if (i >= 0) {
+        out[i] = lineOf(b);
+      } else {
+        out.add(lineOf(b));
+      }
+      out.sort((a, c) => a.startMin.compareTo(c.startMin));
+      return out;
+    }
+
+    String? presetName;
+    final key = presetKey;
+    if (key != null && _presetKeyIsValid(key)) {
+      presetName = _displayNameForPresetKey(key);
+      final bt = _tryBuiltinPresetKey(key);
+      if (bt != null) {
+        setState(() {
+          _presetTaskOverrides[bt] = merged(_effectivePresetLines(bt));
+          _refreshPresetVariants();
+        });
+        await _savePresetTaskOverrides();
+        await _saveUserPresetDays();
+      } else {
+        final u = _userPresetForKey(key);
+        if (u != null) {
+          final i = _userPresetDays.indexOf(u);
+          final lines = merged(u.lines);
+          setState(() {
+            if (u.isVariant) {
+              final base = _variantBaseLines(u.parentKey!);
+              _userPresetDays[i] = u.copyWith(
+                lines: lines,
+                diff: presetVariantDiff(base, lines),
+              );
+            } else {
+              _userPresetDays[i] = u.copyWith(lines: lines);
+              _refreshPresetVariants();
+            }
+          });
+          await _saveUserPresetDays();
+        }
+      }
+    }
+    // Schon angelegte kommende Tage mit diesem Block anpassen.
+    final today = _onlyDay(_selectedDate);
+    var days = 0;
+    setState(() {
+      for (final e in _days.entries) {
+        if (!e.key.isAfter(today)) continue;
+        if (key != null &&
+            _dayPlanPresetKind[e.key] != null &&
+            _dayPlanPresetKind[e.key] != key &&
+            _dayPlanPresetKind[e.key] != _kIndividualDayPresetKey) {
+          continue;
+        }
+        var touched = false;
+        for (final x in e.value) {
+          if (x.title != origTitle || x.completed) continue;
+          x
+            ..title = b.title
+            ..startMin = b.startMin
+            ..endMin = b.endMin
+            ..colorLabel = b.colorLabel
+            ..notes = b.notes
+            ..customStripeHex = b.customStripeHex
+            ..customIconCodePoint = b.customIconCodePoint;
+          touched = true;
+        }
+        if (touched) {
+          days++;
+          _sortBlocksChronologically(e.value);
+          _repairUnpinnedLinearOverlaps(e.value);
+        }
+      }
+    });
+    if (!mounted) return;
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+      SnackBar(
+        content: Text(
+          presetName != null
+              ? 'Für alle Tage übernommen: Preset „$presetName“'
+                    '${days > 0 ? ' + $days kommende Tage' : ''}.'
+              : 'Dieser Tag hat kein Preset – $days kommende Tage angepasst.',
+        ),
+      ),
+    );
+  }
+
   int _stealMinutesTowardFollowing(TimeBlock following, int newEditedEndMin) {
     const minDur = 15;
     if (newEditedEndMin <= following.startMin) return 0;
@@ -11751,6 +11857,15 @@ if (expanded && subTotal > 0) ...[
     final subtaskInputCtrl = TextEditingController();
 
     final origEditEndMin = editing?.endMin;
+    final origTitle = editing?.title;
+    final origDayKind = () {
+      final k = _dayPlanPresetKind[_onlyDay(_selectedDate)];
+      if (k != null && _presetKeyIsValid(k)) return k;
+      // Individueller Tag: das Preset, aus dem er stammt (Zeitraum bzw. Hauptplan).
+      return _presetForDate(_onlyDay(_selectedDate))?.presetKey ??
+          _resolvedActivePresetKey();
+    }();
+    var applyAll = false;
 
     var draftStart = editing?.startMin ?? draftStartMin ?? 540;
     var draftEnd = editing?.endMin ??
@@ -12103,6 +12218,7 @@ if (expanded && subTotal > 0) ...[
         }
       }
 
+      TimeBlock? anchorBlockOut;
       String? stripeHexOut;
       if (useCategoryStripe || allDay) {
         stripeHexOut = null;
@@ -12116,6 +12232,7 @@ if (expanded && subTotal > 0) ...[
       _recordUndoSnapshot();
       setState(() {
         TimeBlock? anchorBlock = editing;
+        anchorBlockOut = editing;
         if (editing == null) {
           _getBlocksForDay(_selectedDate).add(
             anchorBlock = _newBlock(
@@ -12165,12 +12282,20 @@ if (expanded && subTotal > 0) ...[
         }
         _ensureDayExists(_selectedDate);
         final dayFinal = _days[_onlyDay(_selectedDate)]!;
+        anchorBlockOut = anchorBlock;
         if (anchorBlock != null) _makeRoomForBlock(dayFinal, anchorBlock);
         _repairOverlapsWithPins(dayFinal);
         _repairUnpinnedLinearOverlaps(dayFinal);
         _repairOverlapsWithPins(dayFinal);
         _dayPlanPresetKind[_onlyDay(_selectedDate)] = _kIndividualDayPresetKey;
       });
+      if (applyAll && anchorBlockOut != null) {
+        await _applyBlockToAll(
+          origTitle: origTitle ?? anchorBlockOut!.title,
+          b: anchorBlockOut!,
+          presetKey: origDayKind,
+        );
+      }
       if (editing != null) _syncProjectRotationForBlock(editing);
       _schedulePersistDayPlans();
       if (!mounted) return;
@@ -14803,7 +14928,55 @@ if (expanded && subTotal > 0) ...[
                             14,
                             14 + MediaQuery.of(context).padding.bottom,
                           ),
-                          child: Row(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: Row(
+                                  children: [
+                                    Text(
+                                      'Gilt für:',
+                                      style: TextStyle(
+                                        color: p.muted,
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    for (final opt in const [false, true])
+                                      Padding(
+                                        padding: const EdgeInsets.only(right: 6),
+                                        child: ChoiceChip(
+                                          label: Text(
+                                            opt
+                                                ? 'Alle Tage (Preset)'
+                                                : 'Nur diesen Tag',
+                                          ),
+                                          selected: applyAll == opt,
+                                          showCheckmark: false,
+                                          selectedColor: p.accent.withValues(
+                                            alpha: 0.25,
+                                          ),
+                                          side: BorderSide(
+                                            color: applyAll == opt
+                                                ? p.accent
+                                                : p.hairline,
+                                          ),
+                                          labelStyle: TextStyle(
+                                            color: p.text,
+                                            fontWeight: FontWeight.w700,
+                                            fontSize: 12.5,
+                                          ),
+                                          visualDensity: VisualDensity.compact,
+                                          onSelected: (_) =>
+                                              setSheet(() => applyAll = opt),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                              Row(
                             crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
                               if (editing case final editTarget?)
@@ -14859,6 +15032,8 @@ if (expanded && subTotal > 0) ...[
                                   ),
                                 ),
                               ),
+                            ],
+                          ),
                             ],
                           ),
                         ),
