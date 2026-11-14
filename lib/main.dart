@@ -1166,8 +1166,12 @@ const Map<String, String> kPresetBlockNotes = {
 • Am Projekt arbeiten
 • Podcast + Steps""",
   'evening meal': """• Best Case: ½ Magerquark-Protein-Shake""",
+  'bible study 15min': """## Mittags kurz: 15 min + 15 min Puffer
+• Im Wort bleiben, an Gott denken, Liebe tanken
+• Bewusst kurz – danach frei und mit Lust aufs Arbeiten
+• Die lange Zeit mit Gott ist morgens und abends""",
   'abendroutine': """## Vor dem Schlafen
-• 15 min Bibel
+• 45 min Bibel – richtig Zeit für Gott, Frieden tanken
 • Wohnung ordentlich hinterlassen
 • Klamotten für morgen rauslegen
 
@@ -1181,6 +1185,15 @@ const Map<String, String> kPresetBlockNotes = {
 
 /// Frühere Fassungen der Preset-Texte (werden automatisch aktualisiert).
 const Set<String> _kOldPresetBlockNotes = {
+  """## Vor dem Schlafen
+• 15 min Bibel
+• Wohnung ordentlich hinterlassen
+• Klamotten für morgen rauslegen
+
+## Gymtasche packen (für morgen)
+• Frische Boxershorts
+• Trainingskleidung in die Tasche
+• Frisches Handtuch (wenn nötig)""",
   """## Ablauf
 • Elektrolyte
 • Magerquark aus dem TK in den Kühlschrank
@@ -1269,9 +1282,9 @@ List<PresetTaskLine> builtinHustle530Lines() => [
         colorLabel: 'Mahlzeit',
       ),
       PresetTaskLine(
-        title: 'Bible Study 45min',
+        title: 'Bible Study 15min',
         startMin: 825,
-        endMin: 885,
+        endMin: 855,
         colorLabel: 'Routine',
       ),
       PresetTaskLine(
@@ -1295,18 +1308,18 @@ List<PresetTaskLine> builtinHustle530Lines() => [
       PresetTaskLine(
         title: 'Creative Time',
         startMin: 1250,
-        endMin: 1340,
+        endMin: 1300,
         colorLabel: 'Fokus',
       ),
       PresetTaskLine(
         title: 'Evening Meal',
-        startMin: 1340,
-        endMin: 1360,
+        startMin: 1300,
+        endMin: 1320,
         colorLabel: 'Mahlzeit',
       ),
       PresetTaskLine(
         title: 'Abendroutine',
-        startMin: 1360,
+        startMin: 1320,
         endMin: 1395,
         colorLabel: 'Routine',
       ),
@@ -1364,9 +1377,9 @@ List<PresetTaskLine> builtinP530Lines() => [
         colorLabel: 'Mahlzeit',
       ),
       PresetTaskLine(
-        title: 'Bible Study 45min',
+        title: 'Bible Study 15min',
         startMin: 825,
-        endMin: 885,
+        endMin: 855,
         colorLabel: 'Routine',
       ),
       PresetTaskLine(
@@ -1395,8 +1408,8 @@ List<PresetTaskLine> builtinP530Lines() => [
       ),
       PresetTaskLine(
         title: 'Abendroutine',
-        startMin: 1350,
-        endMin: 1380,
+        startMin: 1320,
+        endMin: 1395,
         colorLabel: 'Routine',
       ),
       PresetTaskLine(
@@ -1771,9 +1784,9 @@ List<PresetTaskLine> builtinPresetLinesFor(PlannerPresetType preset) {
           colorLabel: 'Mahlzeit',
         ),
         PresetTaskLine(
-          title: 'Bible Study 45min',
+          title: 'Bible Study 15min',
           startMin: 690,
-          endMin: 750,
+          endMin: 720,
           colorLabel: 'Wichtig',
         ),
         PresetTaskLine(
@@ -1805,6 +1818,12 @@ List<PresetTaskLine> builtinPresetLinesFor(PlannerPresetType preset) {
           startMin: 960,
           endMin: 1080,
           colorLabel: 'Fokus',
+        ),
+        PresetTaskLine(
+          title: 'Abendroutine',
+          startMin: 1245,
+          endMin: 1305,
+          colorLabel: 'Routine',
         ),
         PresetTaskLine(
           title: 'Go to bed',
@@ -6074,6 +6093,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
             _enrichMorningRoutine(b);
             if (pk == 'hustle530' || pk == 'p530') _update530Block(b);
           }
+          _migrateBibleTimes(pk, blocks);
           // Kommende 5:30-Tage, die noch mit dem ersten (falschen) Abend angelegt wurden,
           // neu aus dem Preset bauen – nur wenn dort noch nichts abgehakt ist.
           if (pk == 'p530' &&
@@ -6861,6 +6881,22 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
         }
         await prefs.setBool(migKey, true);
       }
+      const migBible = 'planner_mig_bible_15_45_v1';
+      if (prefs.getBool(migBible) != true) {
+        var changed = false;
+        for (final t in PlannerPresetType.values) {
+          final l = _presetTaskOverrides[t];
+          if (l == null) continue;
+          final n = _migrateBibleLines(t.name, l);
+          _presetTaskOverrides[t] = n;
+          changed = true;
+        }
+        if (changed) {
+          if (mounted) setState(_refreshPresetVariants);
+          await _savePresetTaskOverrides();
+        }
+        await prefs.setBool(migBible, true);
+      }
     } catch (_) {}
   }
 
@@ -6914,6 +6950,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
   void _update530Block(TimeBlock b) {
     if (b.title.trim() == 'Cyrcle block') b.title = 'Cyrcle Block';
     if (b.title.trim() == 'Bibel Study 45min') b.title = 'Bible Study 45min';
+    if (b.title.trim() == 'Bibel Study 15min') b.title = 'Bible Study 15min';
     final t = b.title.trim();
     if ((t == 'Morgen Routine' || t == 'Pre-Workout + Get Ready for Gym') &&
         b.colorLabel == 'Routine' &&
@@ -6923,9 +6960,89 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
         b.title = 'Pre-Workout + Get Ready for GYM';
       }
     } else if (t == 'Bibel' && b.colorLabel == 'Wichtig') {
-      b.title = 'Bible Study 45min';
+      b.title = 'Bible Study 15min';
       b.colorLabel = 'Routine';
     }
+  }
+
+  /// 14.11.: Bibel mittags 15 min (+15 Puffer), abends 45 min in der Abendroutine.
+  /// Greift nur, wenn die Zeiten noch exakt den alten Preset-Werten entsprechen.
+  static const Map<String, List<List<Object>>> _kBibleMig = {
+    // [Titel, alter Start, altes Ende, neuer Start, neues Ende]
+    'p530': [
+      ['Abendroutine', 1350, 1380, 1320, 1395],
+    ],
+    'hustle530': [
+      ['Creative Time', 1250, 1340, 1250, 1300],
+      ['Evening Meal', 1340, 1360, 1300, 1320],
+      ['Abendroutine', 1360, 1395, 1320, 1395],
+    ],
+    'alltag': [],
+  };
+
+  bool _isOldBible45(String t) {
+    final x = t.trim().toLowerCase();
+    return x == 'bible study 45min' || x == 'bibel study 45min';
+  }
+
+  void _migrateBibleTimes(String pk, List<TimeBlock> blocks) {
+    final rules = _kBibleMig[pk];
+    if (rules == null) return;
+    for (final b in blocks) {
+      if (_isOldBible45(b.title) && !b.completed) {
+        b.title = 'Bible Study 15min';
+        if (b.endMin - b.startMin == 60) b.endMin = b.startMin + 30;
+        final n = kPresetBlockNotes['bible study 15min'];
+        if (n != null && b.notes.trim().isEmpty) b.notes = n;
+      }
+      for (final r in rules) {
+        if (b.title.trim() == r[0] &&
+            b.startMin == r[1] &&
+            b.endMin == r[2]) {
+          b.startMin = r[3] as int;
+          b.endMin = r[4] as int;
+        }
+      }
+    }
+    if (pk == 'alltag' &&
+        blocks.any((b) => b.title.trim() == 'Bible Study 15min') &&
+        !blocks.any((b) => b.title.trim() == 'Abendroutine') &&
+        !blocks.any((b) =>
+            b.endMin > b.startMin && b.startMin < 1305 && b.endMin > 1245)) {
+      blocks.add(
+        TimeBlock(
+          id: _nextId(),
+          title: 'Abendroutine',
+          startMin: 1245,
+          endMin: 1305,
+          emoji: '',
+          colorLabel: 'Routine',
+          notes: kPresetBlockNotes['abendroutine'] ?? '',
+        ),
+      );
+      blocks.sort((a, b) => a.startMin.compareTo(b.startMin));
+    }
+  }
+
+  List<PresetTaskLine> _migrateBibleLines(String pk, List<PresetTaskLine> l) {
+    final rules = _kBibleMig[pk];
+    if (rules == null) return l;
+    final out = <PresetTaskLine>[];
+    for (var x in l) {
+      if (_isOldBible45(x.title)) {
+        x = x.copyWith(
+          title: 'Bible Study 15min',
+          endMin: x.endMin - x.startMin == 60 ? x.startMin + 30 : null,
+        );
+      }
+      for (final r in rules) {
+        if (x.title.trim() == r[0] && x.startMin == r[1] && x.endMin == r[2]) {
+          x = x.copyWith(startMin: r[3] as int, endMin: r[4] as int);
+        }
+      }
+      out.add(x);
+    }
+    return out;
   }
 
   /// Morgenroutine ohne eigene Notizen/Checkliste bekommt Deans Standard-Inhalt.
