@@ -520,6 +520,7 @@ class TimeBlock {
     this.customStripeHex,
     this.muteReminders = false,
     List<BlockSessionSegment>? sessionSegments,
+    this.fromPreset,
   }) : subtasks = List<BlockSubtask>.from(subtasks ?? const []),
        sessionSegments =
            List<BlockSessionSegment>.from(sessionSegments ?? const []);
@@ -554,6 +555,10 @@ class TimeBlock {
 
   /// Pro Block: keine App-/OS-Erinnerungen (globale Erinnerungen bleiben sonst aktiv).
   bool muteReminders;
+
+  /// true = kam aus einem Preset, false = einzeln eingetragen, null = alt/unbekannt.
+  /// Beim Laden eines Presets werden nur Preset-Blöcke ersetzt.
+  bool? fromPreset;
 
   /// Gleicher Kalendertag [0,1440): Start vor Ende.
   bool get isLinearSlot => !allDay && startMin < endMin;
@@ -623,10 +628,12 @@ class TimeBlock {
             ),
       completed: completed ?? this.completed,
       muteReminders: muteReminders ?? this.muteReminders,
+      fromPreset: fromPreset,
     );
   }
 
   Map<String, dynamic> toJson() => {
+    if (fromPreset != null) 'fp': fromPreset,
     'id': id,
     'title': title,
     'startMin': startMin,
@@ -704,6 +711,7 @@ class TimeBlock {
       customStripeHex: j['customStripeHex'] as String?,
       muteReminders: j['muteReminders'] as bool? ?? false,
       sessionSegments: segs,
+      fromPreset: j['fp'] as bool?,
     );
   }
 }
@@ -2467,7 +2475,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
     return m;
   }
 
-  void _recordUndoSnapshot({bool markSelectedDayAsIndividual = true}) {
+  void _recordUndoSnapshot({bool markSelectedDayAsIndividual = false}) {
     if (markSelectedDayAsIndividual) {
       _dayPlanPresetKind[_onlyDay(_selectedDate)] = _kIndividualDayPresetKey;
     }
@@ -4391,7 +4399,6 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
     _recordUndoSnapshot();
     setState(() {
       block.completed = !block.completed;
-      _dayPlanPresetKind[_onlyDay(_selectedDate)] = _kIndividualDayPresetKey;
     });
     _syncProjectRotationForBlock(block);
     _schedulePersistDayPlans();
@@ -5308,7 +5315,6 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
       _repairOverlapsWithPins(list);
       _repairUnpinnedLinearOverlaps(list);
       _repairOverlapsWithPins(list);
-      _dayPlanPresetKind[today] = _kIndividualDayPresetKey;
       _gridScrolledForDay = null;
     });
     _flushPersistDayPlans();
@@ -5369,7 +5375,6 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
       _repairOverlapsWithPins(blocks);
       _repairUnpinnedLinearOverlaps(blocks);
       _repairOverlapsWithPins(blocks);
-      _dayPlanPresetKind[day] = _kIndividualDayPresetKey;
       _gridScrolledForDay = null;
     });
     _schedulePersistDayPlans();
@@ -6100,9 +6105,17 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
               day.isAfter(_onlyDay(DateTime.now())) &&
               blocks.any((b) => b.title == 'Creative Time') &&
               !blocks.any((b) => b.completed)) {
+            final kept = _individualBlocksOf(blocks, 'p530', 'p530')
+                .where((b) => b.title != 'Creative Time')
+                .toList();
             blocks
               ..clear()
-              ..addAll(_buildPresetBlocksForKey('p530'));
+              ..addAll(
+                _mergePresetWithIndividual(
+                  _buildPresetBlocksForKey('p530'),
+                  kept,
+                ),
+              );
           }
         }
         parsedDays[day] = blocks;
@@ -6929,6 +6942,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
 
   TimeBlock _blockFromPresetLine(PresetTaskLine line) {
     return _enrichMorningRoutine(
+      _markFromPreset(
       _newBlock(
         line.title.isEmpty ? 'Block' : line.title,
         line.startMin,
@@ -6943,7 +6957,131 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
             BlockSubtask(id: _nextId(), title: t),
         ],
       ),
+      ),
     );
+  }
+
+  TimeBlock _markFromPreset(TimeBlock b) {
+    b.fromPreset = true;
+    return b;
+  }
+
+  String _normBlockTitle(String t) => t.trim().toLowerCase();
+
+  Set<String> _presetTitlesFor(String? key) {
+    if (key == null || key.isEmpty || key == _kIndividualDayPresetKey) {
+      return {};
+    }
+    try {
+      return {for (final l in _linesForPresetKey(key)) _normBlockTitle(l.title)};
+    } catch (_) {
+      return {};
+    }
+  }
+
+  Set<String> _allPresetTitles() {
+    final out = <String>{};
+    try {
+      for (final t in PlannerPresetType.values) {
+        for (final l in _effectivePresetLines(t)) {
+          out.add(_normBlockTitle(l.title));
+        }
+      }
+      for (final u in _userPresetDays) {
+        for (final l in u.lines) {
+          out.add(_normBlockTitle(l.title));
+        }
+      }
+    } catch (_) {}
+    return out;
+  }
+
+  /// Einzeln eingetragene Blöcke (Termine, Wichtiges …) – bleiben beim Preset-Laden.
+  /// Alte Blöcke ohne Markierung: alles, was nicht wie ein Preset-Block heißt.
+  List<TimeBlock> _individualBlocksOf(
+    List<TimeBlock> old,
+    String? oldKey,
+    String newKey,
+  ) {
+    final owned = {
+      ..._presetTitlesFor(oldKey),
+      ..._presetTitlesFor(newKey),
+      ..._allPresetTitles(),
+    };
+    return old.where((b) {
+      final fp = b.fromPreset;
+      if (fp != null) return !fp;
+      return !owned.contains(_normBlockTitle(b.title));
+    }).toList();
+  }
+
+  /// Preset-Blöcke um feste/einzelne Blöcke herum einpassen – die einzelnen haben Vorrang.
+  /// Überschneidung: Preset-Block wird gekürzt (oder fällt weg); bei Einstellung
+  /// „nach hinten schieben“ werden die Preset-Blöcke verschoben.
+  List<TimeBlock> _mergePresetWithIndividual(
+    List<TimeBlock> preset,
+    List<TimeBlock> fixed,
+  ) {
+    const minDur = 15;
+    if (fixed.isEmpty) return preset;
+    final fixedIds = {for (final f in fixed) f.id};
+    final lin = fixed.where((k) => k.isLinearSlot).toList()
+      ..sort((a, b) => a.startMin.compareTo(b.startMin));
+    if (_overlapMode == 'push') {
+      final ft = {for (final f in fixed) _normBlockTitle(f.title)};
+      preset = [
+        for (final b in preset)
+          if (!ft.contains(_normBlockTitle(b.title))) b,
+      ];
+      final all = <TimeBlock>[...preset, ...fixed];
+      final wasPinned = {for (final f in fixed) f.id: f.pinned};
+      for (final f in fixed) {
+        f.pinned = true;
+      }
+      for (final k in lin) {
+        _makeRoomForBlock(all, k);
+      }
+      for (final f in fixed) {
+        f.pinned = wasPinned[f.id] ?? false;
+      }
+      return all;
+    }
+    // Für diesen Tag einzeln angepasste Preset-Blöcke ersetzen ihr Preset-Gegenstück.
+    final fixedTitles = {for (final f in fixed) _normBlockTitle(f.title)};
+    preset = [
+      for (final b in preset)
+        if (!fixedTitles.contains(_normBlockTitle(b.title))) b,
+    ];
+    final out = <TimeBlock>[];
+    for (final b in preset) {
+      var keep = true;
+      if (b.isLinearSlot && !fixedIds.contains(b.id)) {
+        for (final k in lin) {
+          if (!(b.startMin < k.endMin && b.endMin > k.startMin)) continue;
+          final left = k.startMin - b.startMin;
+          final right = b.endMin - k.endMin;
+          if (left >= minDur && left >= right) {
+            b.endMin = k.startMin;
+          } else if (right >= minDur) {
+            b.startMin = k.endMin;
+          } else {
+            keep = false;
+            break;
+          }
+        }
+      }
+      if (keep) out.add(b);
+    }
+    out.addAll(fixed);
+    out.sort((a, b) => a.startMin.compareTo(b.startMin));
+    return out;
+  }
+
+  /// Tag mit Preset neu aufbauen, einzeln eingetragene Blöcke bleiben erhalten.
+  List<TimeBlock> _rebuildDayWithPreset(DateTime day, String key) {
+    final old = _days[day] ?? const <TimeBlock>[];
+    final kept = _individualBlocksOf(old, _dayPlanPresetKind[day], key);
+    return _mergePresetWithIndividual(_buildPresetBlocksForKey(key), kept);
   }
 
   /// Bereits angelegte 5:30-Tage an Deans aktuellen 5:30-Plan angleichen.
@@ -7018,6 +7156,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
           emoji: '',
           colorLabel: 'Routine',
           notes: kPresetBlockNotes['abendroutine'] ?? '',
+          fromPreset: true,
         ),
       );
       blocks.sort((a, b) => a.startMin.compareTo(b.startMin));
@@ -7613,22 +7752,32 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
     final todayOd = _onlyDay(DateTime.now());
     final isTodayOd = od == todayOd;
 
+    // Einzeln eingetragene Blöcke (Termine, Wichtiges) bleiben – nur Preset wird ersetzt.
+    final keptIndividual =
+        _individualBlocksOf(list, _dayPlanPresetKind[od], presetKey);
     late List<TimeBlock> merged;
     if (!isTodayOd) {
-      merged = linesIn.map(_blockFromPresetLine).toList();
+      merged = _mergePresetWithIndividual(
+        linesIn.map(_blockFromPresetLine).toList(),
+        keptIndividual,
+      );
     } else {
       final cutoff = _nowWallClockMinutes();
       final allCompleted = list.where((b) => b.completed).toList();
       final future = _blocksFromPresetLinesAfterCutoff(cutoff, linesIn);
       // Wenn die Vorlage nur Slots vor „jetzt“ hätte (z. B. spätabends), ohne Fallback
       // keine neuen Einträge — wirkt dann wie „Lädt nicht“. In dem Fall gesamtes Raster anlegen.
+      final fixed = [
+        ...allCompleted,
+        ...keptIndividual.where((b) => !b.completed),
+      ];
       if (future.isEmpty && linesIn.isNotEmpty) {
-        merged = [
-          ...allCompleted,
-          ...linesIn.map(_blockFromPresetLine),
-        ];
+        merged = _mergePresetWithIndividual(
+          linesIn.map(_blockFromPresetLine).toList(),
+          fixed,
+        );
       } else {
-        merged = [...allCompleted, ...future];
+        merged = _mergePresetWithIndividual(future, fixed);
       }
     }
 
@@ -7689,10 +7838,10 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
     final key = _resolvedActivePresetKey();
     for (final day in _days.keys.toList()) {
       if (day.isBefore(start) || day == start) continue;
-      if (_dayPlanPresetKind[day] == _kIndividualDayPresetKey) continue;
+      if (_days[day]!.any((b) => b.completed)) continue;
       final w = _presetForDate(day);
       if (w != null && !w.isOpenEnd) continue;
-      _days[day] = _buildPresetBlocksForKey(key);
+      _days[day] = _rebuildDayWithPreset(day, key);
       _dayPlanPresetKind[day] = key;
     }
   }
@@ -10199,10 +10348,6 @@ Row(
                                       onTap: () {
                                         setState(() {
                                           block.completed = !block.completed;
-                                          _dayPlanPresetKind[_onlyDay(
-                                                _selectedDate,
-                                              )] =
-                                              _kIndividualDayPresetKey;
                                         });
                                         _syncProjectRotationForBlock(block);
                                         _schedulePersistDayPlans();
@@ -11373,7 +11518,6 @@ if (expanded && subTotal > 0) ...[
       _sortBlocksChronologically(list);
       _repairUnpinnedLinearOverlaps(list);
       _repairOverlapsWithPins(list);
-      _dayPlanPresetKind[dk] = _kIndividualDayPresetKey;
       if (!kIsWeb) {
         HapticFeedback.lightImpact();
       }
@@ -11501,6 +11645,31 @@ if (expanded && subTotal > 0) ...[
                           l.copy(),
                       ],
                 };
+                String sig(String k) {
+                  try {
+                    return jsonEncode([
+                      for (final l in _linesForPresetKey(k)) l.toJson(),
+                    ]);
+                  } catch (_) {
+                    return '';
+                  }
+                }
+                final today0 = _onlyDay(DateTime.now());
+                String? keyOf(DateTime day) {
+                  final k = _dayPlanPresetKind[day];
+                  if (k != null &&
+                      k != _kIndividualDayPresetKey &&
+                      _presetKeyIsValid(k)) {
+                    return k;
+                  }
+                  final w = _presetForDate(day);
+                  return w?.presetKey ?? _resolvedActivePresetKey();
+                }
+                final futureKeys = <String>{
+                  for (final d in _days.keys)
+                    if (d.isAfter(today0)) ?keyOf(d),
+                };
+                final before = {for (final k in futureKeys) k: sig(k)};
                 setState(() {
                   _presetTaskOverrides.clear();
                   _presetTaskOverrides.addAll(merged);
@@ -11520,7 +11689,20 @@ if (expanded && subTotal > 0) ...[
                     ..clear()
                     ..addAll(builtinNames);
                   _sanitizeActivePresetKeyIfStale();
+                  // Kommende Tage mit geändertem Preset neu aufbauen –
+                  // einzeln eingetragene Blöcke bleiben drin.
+                  for (final k in futureKeys) {
+                    if (!_presetKeyIsValid(k) || sig(k) == before[k]) continue;
+                    for (final day in _days.keys.toList()) {
+                      if (!day.isAfter(today0)) continue;
+                      if (keyOf(day) != k) continue;
+                      if (_days[day]!.any((b) => b.completed)) continue;
+                      _days[day] = _rebuildDayWithPreset(day, k);
+                      _dayPlanPresetKind[day] = k;
+                    }
+                  }
                 });
+                _schedulePersistDayPlans();
                 await _savePresetTaskOverrides();
                 await _saveUserPresetDays();
                 await _saveBuiltinPresetDisplayOverrides();
@@ -12414,7 +12596,9 @@ if (expanded && subTotal > 0) ...[
         _repairOverlapsWithPins(dayFinal);
         _repairUnpinnedLinearOverlaps(dayFinal);
         _repairOverlapsWithPins(dayFinal);
-        _dayPlanPresetKind[_onlyDay(_selectedDate)] = _kIndividualDayPresetKey;
+        // Tag bleibt mit seinem Preset verknüpft; der Block selbst merkt sich,
+        // ob er zum Preset gehört (alle Tage) oder nur für diesen Tag gilt.
+        anchorBlockOut?.fromPreset = applyAll;
       });
       if (applyAll && anchorBlockOut != null) {
         await _applyBlockToAll(
@@ -15316,6 +15500,7 @@ if (expanded && subTotal > 0) ...[
               completed: false,
               muteReminders: b.muteReminders,
               sessionSegments: const [],
+              fromPreset: b.fromPreset,
             ),
           );
         } else if (end > 1440) {
@@ -15340,6 +15525,7 @@ if (expanded && subTotal > 0) ...[
                 completed: false,
                 muteReminders: b.muteReminders,
                 sessionSegments: const [],
+                fromPreset: b.fromPreset,
               ),
             );
           }
@@ -16512,7 +16698,7 @@ if (expanded && subTotal > 0) ...[
   ) {
     void applyDay(DateTime cursor) {
       if (!_weekdayMatchesPreset(cursor, weekdayMask)) return;
-      _days[cursor] = _buildPresetBlocksForKey(presetKey);
+      _days[cursor] = _rebuildDayWithPreset(cursor, presetKey);
       _dayPlanPresetKind[cursor] = presetKey;
     }
 
@@ -16528,7 +16714,6 @@ if (expanded && subTotal > 0) ...[
       applyDay(_onlyDay(_selectedDate));
       for (final day in _days.keys.toList()) {
         if (day.isBefore(start)) continue;
-        if (_dayPlanPresetKind[day] == _kIndividualDayPresetKey) continue;
         applyDay(day);
       }
     }
@@ -17085,6 +17270,7 @@ if (expanded && subTotal > 0) ...[
       sessionSegments: sessionSegments,
       completed: completed,
       muteReminders: muteReminders,
+      fromPreset: false,
     );
   }
 
