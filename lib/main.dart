@@ -19,6 +19,7 @@ import 'package:sol/project_rotation.dart';
 import 'package:sol/web_safe_area.dart';
 import 'package:sol/calendar_export.dart';
 import 'package:sol/macro_plan.dart';
+import 'package:sol/focus_timer.dart';
 import 'package:sol/reminder_prefs_sheet.dart';
 import 'package:sol/widgets/block_session_live_strip.dart';
 import 'package:sol/widgets/current_task/current_task_package.dart';
@@ -1034,6 +1035,7 @@ const List<({String id, String label, String sub, IconData icon})> _kFeatures = 
   (id: 'checklist', label: 'Checkliste', sub: 'Unterpunkte im Block', icon: Icons.checklist_rounded),
   (id: 'tasks', label: 'Aufgaben', sub: 'Liste, die in den nächsten Block mitwandert', icon: Icons.format_list_numbered_rounded),
   (id: 'macros', label: 'Makros', sub: 'Makros aus PREPIT pro Mahlzeit', icon: Icons.restaurant_menu_rounded),
+  (id: 'timer', label: 'Timer & Zeiten', sub: 'Zeit stoppen, Done-Liste, Tag/Woche', icon: Icons.timer_rounded),
   (id: 'focus', label: 'Fokus & Pausen', sub: 'Block in Fokus- und Pausenabschnitte teilen', icon: Icons.timer_outlined),
   (id: 'phone', label: 'Erinnerung aufs Handy', sub: 'Knopf für Kalender-Erinnerungen im Block', icon: Icons.phone_iphone_rounded),
 ];
@@ -2455,6 +2457,85 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
   String _overlapMode = 'ask';
   bool _featOn(String id) => !_featuresOff.contains(id);
 
+  final TimerStore _timerStore = TimerStore();
+
+  /// Timer für einen Block starten (Ziel = Restzeit, wenn er gerade läuft, sonst Blocklänge).
+  void _startTimerForBlock(TimeBlock b) {
+    int? target;
+    if (b.isLinearSlot) {
+      final isToday = _onlyDay(_selectedDate) == _onlyDay(DateTime.now());
+      final nowMin = _nowWallClockMinutes();
+      if (isToday && nowMin >= b.startMin && nowMin < b.endMin) {
+        target = (b.endMin - nowMin) * 60;
+      } else {
+        target = (b.endMin - b.startMin) * 60;
+      }
+      if (target < 5 * 60) target = null;
+    }
+    _timerStore.start(title: b.title, kind: _taskKey(b.title), targetSecs: target);
+    _openFocusScreen();
+  }
+
+  void _openFocusScreen() {
+    final r = _timerStore.running;
+    if (r == null) return;
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        fullscreenDialog: true,
+        builder: (_) => FocusTimerScreen(
+          store: _timerStore,
+          openTasks: () {
+            final k = _timerStore.running?.kind ?? '';
+            if (k.isEmpty || !_featOn('tasks')) return const [];
+            return [for (final t in _openTasksFor(k)) t.title];
+          },
+          onTaskDone: (title) async {
+            final k = _timerStore.running?.kind ?? '';
+            final open = _openTasksFor(k);
+            final i = open.indexWhere((t) => t.title == title);
+            if (i >= 0) await _completeTask(k, open[i]);
+          },
+          onStopped: (total) {
+            ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+              SnackBar(
+                content: Text('${fmtDur(total)} gespeichert'),
+                action: SnackBarAction(
+                  label: 'Zeiten',
+                  onPressed: _openTimeLogSheet,
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openTimeLogSheet() async {
+    final today = _getBlocksForDay(DateTime.now());
+    Color colorForKind(String kind) {
+      for (final b in today) {
+        if (_taskKey(b.title) == kind) return _stripeForBlock(b);
+      }
+      return context.palette.accent;
+    }
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => TimeLogSheet(
+        store: _timerStore,
+        colorForKind: colorForKind,
+        kindOf: _taskKey,
+        blockTitlesToday: [
+          for (final b in today)
+            if (!b.allDay && !b.isOvernightSlot) b.title,
+        ],
+      ),
+    );
+  }
+
   /// Projekt-Rotation für „Projekt-Session“-Blöcke.
   ProjectRotation _projectRotation = ProjectRotation();
 
@@ -3827,6 +3908,13 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                 : 'Als Nächstes: $circleNext',
             onTap: _openProjectRotationSheet,
           ),
+          if (_featOn('timer'))
+            (
+              icon: Icons.timer_rounded,
+              label: 'Gemessene Zeiten',
+              sub: 'Heute ${fmtDur(_timerStore.secsForDay(DateTime.now()))} · Done-Liste & Woche',
+              onTap: () => unawaited(_openTimeLogSheet()),
+            ),
           (
             icon: Icons.format_list_numbered_rounded,
             label: 'Aufgaben (Deep Work)',
@@ -6546,6 +6634,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
       unawaited(_syncReminders());
     });
     unawaited(plannerNotificationsInit());
+    unawaited(_timerStore.load());
     _reminderTicker = Timer.periodic(const Duration(seconds: 35), (_) {
       if (!mounted) return;
       unawaited(_syncReminders());
@@ -8559,6 +8648,21 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
               blocks: blocks,
               selectedCount: selectedCount,
             ),
+          if (_featOn('timer'))
+            AnimatedBuilder(
+              animation: _timerStore,
+              builder: (context, _) => _timerStore.running == null
+                  ? const SizedBox.shrink()
+                  : Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 6),
+                      child: Center(
+                        child: RunningTimerPill(
+                          store: _timerStore,
+                          onTap: _openFocusScreen,
+                        ),
+                      ),
+                    ),
+            ),
           _bottomBar(),
         ],
       ),
@@ -10476,9 +10580,27 @@ Row(
                                       case 'inbox':
                                         _moveToBacklog(block);
                                         break;
+                                      case 'timer':
+                                        _startTimerForBlock(block);
+                                        break;
                                     }
                                   },
                                   itemBuilder: (c) => [
+                                    if (_featOn('timer') &&
+                                        !block.allDay &&
+                                        !block.isOvernightSlot)
+                                      const PopupMenuItem(
+                                        value: 'timer',
+                                        child: ListTile(
+                                          contentPadding: EdgeInsets.zero,
+                                          leading: Icon(
+                                            Icons.timer_rounded,
+                                            size: 20,
+                                          ),
+                                          title: Text('Timer starten'),
+                                          dense: true,
+                                        ),
+                                      ),
                                     PopupMenuItem(
                                       value: 'pin',
                                       child: ListTile(

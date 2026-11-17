@@ -26,5 +26,6 @@ const List<String> kSolSyncedPlannerStringPrefKeys = [
   'planner_block_tasks_v1',
   'planner_feature_toggles_v1',
   'planner_archived_presets_v1',
+  'planner_time_logs_v1',
   kPlannerReminderPrefsKeySync,
 ];
