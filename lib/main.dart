@@ -2498,7 +2498,11 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
           onStopped: (total) {
             ScaffoldMessenger.maybeOf(context)?.showSnackBar(
               SnackBar(
-                content: Text('${fmtDur(total)} gespeichert'),
+                content: Text(
+                  total < 30
+                      ? 'Unter 30 Sek. – nicht gespeichert'
+                      : '${fmtDur(total)} gespeichert',
+                ),
                 action: SnackBarAction(
                   label: 'Zeiten',
                   onPressed: _openTimeLogSheet,
