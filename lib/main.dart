@@ -9673,11 +9673,8 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
     required bool tightPhone,
   }) {
     final p = context.palette;
-    final now0 = DateTime.now();
-    final nowMin0 = now0.hour * 60 + now0.minute;
-    final isNow0 = _onlyDay(_selectedDate) == _onlyDay(now0) &&
-        nowMin0 >= startMin &&
-        nowMin0 < endMin;
+    // Jetzt-Hervorhebung abgeschaltet (alte Optik war besser).
+    const isNow0 = false;
     final h = max(
       _minutesToLaneHeight(endMin - startMin, tightPhone: tightPhone),
       isNow0 ? 84.0 : 0.0,
@@ -9689,9 +9686,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
     // Jetzt gerade frei? Dann Lücke hervorheben + Jetzt-Linie.
     final now = DateTime.now();
     final nowMin = now.hour * 60 + now.minute;
-    final isNow = _onlyDay(_selectedDate) == _onlyDay(now) &&
-        nowMin >= startMin &&
-        nowMin < endMin;
+    const isNow = false;
     final nowFrac = isNow
         ? ((nowMin - startMin) / max(1, endMin - startMin)).clamp(0.0, 1.0)
         : 0.0;
