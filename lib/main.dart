@@ -1032,11 +1032,9 @@ const String _kFeatureTogglesPrefKey = 'planner_feature_toggles_v1';
 
 /// Schaltbare Funktionen (Einstellungen → Funktionen).
 const List<({String id, String label, String sub, IconData icon})> _kFeatures = [
-  (id: 'checklist', label: 'Checkliste', sub: 'Unterpunkte im Block', icon: Icons.checklist_rounded),
-  (id: 'tasks', label: 'Aufgaben', sub: 'Liste, die in den nächsten Block mitwandert', icon: Icons.format_list_numbered_rounded),
+  (id: 'tasks', label: 'Aufgaben', sub: 'Punkte im Block – nur für ihn oder ↻ mitwandernd', icon: Icons.format_list_numbered_rounded),
   (id: 'macros', label: 'Makros', sub: 'Makros aus PREPIT pro Mahlzeit', icon: Icons.restaurant_menu_rounded),
   (id: 'timer', label: 'Timer & Zeiten', sub: 'Zeit stoppen, Done-Liste, Tag/Woche', icon: Icons.timer_rounded),
-  (id: 'focus', label: 'Fokus & Pausen', sub: 'Block in Fokus- und Pausenabschnitte teilen', icon: Icons.timer_outlined),
   (id: 'phone', label: 'Erinnerung aufs Handy', sub: 'Knopf für Kalender-Erinnerungen im Block', icon: Icons.phone_iphone_rounded),
 ];
 const String _kDeepWorkTodoItemsPrefKey = 'planner_deep_work_todo_items_v1';
@@ -2455,7 +2453,12 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
 
   /// Block verlängert und überschneidet den nächsten: 'ask' | 'cut' | 'push'.
   String _overlapMode = 'ask';
-  bool _featOn(String id) => !_featuresOff.contains(id);
+  // „Fokus & Pausen“ ist durch den Timer ersetzt.
+  bool _featOn(String id) {
+    if (id == 'focus') return false;
+    if (id == 'checklist') id = 'tasks';
+    return !_featuresOff.contains(id);
+  }
 
   final TimerStore _timerStore = TimerStore();
 
@@ -3942,37 +3945,14 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
         ],
       ),
       (
-        title: 'Pläne & Presets',
-        items: [
-          (
-            icon: Icons.save_as_rounded,
-            label: 'Tag als Preset speichern',
-            sub: 'Aktuellen Plan als Vorlage übernehmen',
-            onTap: _saveDayAsPresetSheet,
-          ),
-          (
-            icon: Icons.call_split_rounded,
-            label: 'Preset-Variante erstellen',
-            sub: 'z. B. 5:30 Sommer / Winter',
-            onTap: () => unawaited(_createPresetVariantFlow()),
-          ),
-          (
-            icon: Icons.inventory_2_outlined,
-            label: 'Presets verwalten',
-            sub: 'Nicht genutzte ins Archiv packen',
-            onTap: () => unawaited(_openPresetArchiveSheet()),
-          ),
-          (
-            icon: Icons.date_range_rounded,
-            label: 'Preset-Zeitraum',
-            sub: 'Welche Vorlage an welchen Tagen gilt',
-            onTap: _openPresetWindowDialog,
-          ),
-        ],
-      ),
-      (
         title: 'Einstellungen',
         items: [
+          (
+            icon: Icons.dashboard_customize_outlined,
+            label: 'Presets',
+            sub: 'Raster, Varianten, Zeitraum, Archiv',
+            onTap: _openPlannerModeSheet,
+          ),
           (
             icon: Icons.tune_rounded,
             label: 'Ein- & ausblenden',
@@ -11422,7 +11402,7 @@ if (expanded && subTotal > 0) ...[
             SizedBox(width: hp < 10 ? 6 : 8),
             Expanded(
               child: Tooltip(
-                message: 'Preset wählen, Flex‑Modus, Preset-Raster',
+                message: 'Presets, Sortieren',
                 child: OutlinedButton.icon(
                   style: OutlinedButton.styleFrom(
                     foregroundColor: p.text,
@@ -12283,6 +12263,7 @@ if (expanded && subTotal > 0) ...[
     final circleAddCtrl = TextEditingController();
     var notesEditing = false;
     final taskAddCtrl = TextEditingController();
+    bool? addWander;
     final notesCtrl = TextEditingController(text: editing?.notes ?? '');
     final subtaskInputCtrl = TextEditingController();
 
@@ -13169,14 +13150,42 @@ if (expanded && subTotal > 0) ...[
                 : _stripeColor(colorLabel);
             Widget tasksSection() {
               final key = _taskKey(titleCtrl.text);
-              final open = _openTasksFor(key);
+              final hasTitle = titleCtrl.text.trim().isNotEmpty;
+              final open = hasTitle ? _openTasksFor(key) : <DeepWorkTodoItem>[];
               final c = checkCol;
+              final wander = hasTitle &&
+                  (addWander ?? (key == 'deep work' || key == 'circle'));
               void add() {
                 final t = taskAddCtrl.text.trim();
                 if (t.isEmpty) return;
                 taskAddCtrl.clear();
-                unawaited(_addTask(key, t).then((_) => setSheet(() {})));
+                if (wander) {
+                  unawaited(_addTask(key, t).then((_) => setSheet(() {})));
+                } else {
+                  appendSubtaskFromPreset(t);
+                }
               }
+
+              Widget circle({required bool done, required bool loop}) =>
+                  Container(
+                    width: 22,
+                    height: 22,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: done ? c : Colors.transparent,
+                      border: Border.all(
+                        color: c.withValues(alpha: done ? 1 : 0.8),
+                        width: 1.6,
+                      ),
+                    ),
+                    child: done
+                        ? Icon(Icons.check_rounded, size: 15, color: p.bg)
+                        : loop
+                            ? Icon(Icons.autorenew_rounded,
+                                size: 12, color: c.withValues(alpha: 0.8))
+                            : null,
+                  );
+
               return Container(
                 padding: const EdgeInsets.fromLTRB(16, 12, 12, 10),
                 decoration: BoxDecoration(
@@ -13187,15 +13196,29 @@ if (expanded && subTotal > 0) ...[
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      key == 'circle' ? 'To-Dos' : 'Aufgaben',
-                      style: TextStyle(
-                        color: p.text,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 15.5,
-                      ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            key == 'circle' ? 'To-Dos' : 'Aufgaben',
+                            style: TextStyle(
+                              color: p.text,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 15.5,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Schnell-Vorlagen bearbeiten',
+                          visualDensity: VisualDensity.compact,
+                          icon: Icon(Icons.tune_rounded, size: 20, color: p.muted),
+                          onPressed: () async {
+                            await _openSubtaskQuickPresetsEditor();
+                            if (mounted) setSheet(() {});
+                          },
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 5),
                     Container(
                       width: 28,
                       height: 2.5,
@@ -13207,8 +13230,8 @@ if (expanded && subTotal > 0) ...[
                     const SizedBox(height: 6),
                     Text(
                       key == 'circle'
-                          ? 'To-Dos für die Circle-Zeit (Mails, Dringendes …). Solange welche offen sind, stehen sie vorne und der Circle rückt nicht weiter.'
-                          : 'Bleiben stehen und wandern in den nächsten „${titleCtrl.text.trim()}“-Block, bis du sie abhakst. Ziehen ändert die Reihenfolge.',
+                          ? 'Solange To-Dos offen sind, stehen sie vorne und der Circle rückt nicht weiter.'
+                          : '↻ = wandert in den nächsten gleichen Block, bis abgehakt. Ohne ↻ gilt der Punkt nur für diesen Block.',
                       style: TextStyle(color: p.muted, fontSize: 12, height: 1.35),
                     ),
                     const SizedBox(height: 8),
@@ -13243,45 +13266,20 @@ if (expanded && subTotal > 0) ...[
                                   ),
                                   child: Padding(
                                     padding: const EdgeInsets.fromLTRB(0, 6, 12, 6),
-                                    child: Container(
-                                      width: 22,
-                                      height: 22,
-                                      decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        border: Border.all(
-                                          color: c.withValues(alpha: 0.8),
-                                          width: 1.6,
-                                        ),
-                                      ),
-                                    ),
+                                    child: circle(done: false, loop: true),
                                   ),
                                 ),
                                 Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      if (i == 0)
-                                        Text(
-                                          'JETZT DRAN',
-                                          style: TextStyle(
-                                            color: c,
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.w800,
-                                            letterSpacing: 0.6,
-                                          ),
-                                        ),
-                                      Text(
-                                        it.title,
-                                        style: TextStyle(
-                                          color: p.text,
-                                          fontSize: 15,
-                                          fontWeight: i == 0
-                                              ? FontWeight.w700
-                                              : FontWeight.w500,
-                                          height: 1.3,
-                                        ),
-                                      ),
-                                    ],
+                                  child: Text(
+                                    it.title,
+                                    style: TextStyle(
+                                      color: p.text,
+                                      fontSize: 15,
+                                      fontWeight: i == 0
+                                          ? FontWeight.w700
+                                          : FontWeight.w500,
+                                      height: 1.3,
+                                    ),
                                   ),
                                 ),
                                 ReorderableDragStartListener(
@@ -13300,10 +13298,96 @@ if (expanded && subTotal > 0) ...[
                           );
                         },
                       ),
+                    for (var i = 0; i < draftSubtasks.length; i++)
+                      Builder(
+                        key: ValueKey<String>('st-${draftSubtasks[i].id}'),
+                        builder: (_) {
+                          final st = draftSubtasks[i];
+                          final stCtrl = subtaskCtrlById[st.id]!;
+                          return Row(
+                            children: [
+                              GestureDetector(
+                                behavior: HitTestBehavior.opaque,
+                                onTap: () => setSheet(() {
+                                  draftSubtasks[i] = st.copyWith(done: !st.done);
+                                }),
+                                child: Padding(
+                                  padding: const EdgeInsets.fromLTRB(0, 6, 12, 6),
+                                  child: circle(done: st.done, loop: false),
+                                ),
+                              ),
+                              Expanded(
+                                child: TextField(
+                                  key: ValueKey<String>(st.id),
+                                  controller: stCtrl,
+                                  style: TextStyle(
+                                    color: p.text,
+                                    fontWeight: FontWeight.w500,
+                                    fontSize: 15,
+                                  ),
+                                  decoration: const InputDecoration(
+                                    isDense: true,
+                                    border: InputBorder.none,
+                                  ),
+                                ),
+                              ),
+                              IconButton(
+                                visualDensity: VisualDensity.compact,
+                                icon: Icon(Icons.close_rounded, size: 18, color: p.muted),
+                                onPressed: () => setSheet(() {
+                                  subtaskCtrlById.remove(st.id)?.dispose();
+                                  draftSubtasks.removeAt(i);
+                                }),
+                              ),
+                            ],
+                          );
+                        },
+                      ),
+                    if (draftSubtasks.isEmpty && _subtaskQuickPresets.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4, bottom: 2),
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: [
+                              for (final preset in _subtaskQuickPresets)
+                                Padding(
+                                  padding: const EdgeInsets.only(right: 8),
+                                  child: ActionChip(
+                                    label: Text(
+                                      preset,
+                                      style: TextStyle(
+                                        color: p.text,
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                    visualDensity: VisualDensity.compact,
+                                    backgroundColor: p.chipBg,
+                                    side: BorderSide(color: p.hairline),
+                                    onPressed: () => appendSubtaskFromPreset(preset),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
                     Row(
                       children: [
-                        Icon(Icons.add_rounded, color: p.muted, size: 22),
-                        const SizedBox(width: 10),
+                        IconButton(
+                          tooltip: wander
+                              ? 'Wandert mit, bis abgehakt (tippen: nur dieser Block)'
+                              : 'Nur dieser Block (tippen: wandert mit)',
+                          visualDensity: VisualDensity.compact,
+                          onPressed: hasTitle
+                              ? () => setSheet(() => addWander = !wander)
+                              : null,
+                          icon: Icon(
+                            wander ? Icons.autorenew_rounded : Icons.radio_button_unchecked_rounded,
+                            color: wander ? c : p.muted,
+                            size: 22,
+                          ),
+                        ),
                         Expanded(
                           child: TextField(
                             controller: taskAddCtrl,
@@ -13311,7 +13395,9 @@ if (expanded && subTotal > 0) ...[
                             textInputAction: TextInputAction.done,
                             onSubmitted: (_) => add(),
                             decoration: InputDecoration(
-                              hintText: 'Aufgabe hinzufügen …',
+                              hintText: wander
+                                  ? 'Aufgabe (wandert mit) …'
+                                  : 'Punkt für diesen Block …',
                               hintStyle: TextStyle(color: p.muted),
                               border: InputBorder.none,
                               isDense: true,
@@ -14664,8 +14750,7 @@ if (expanded && subTotal > 0) ...[
                                   const SizedBox(height: 14),
                                   macroSection(),
                                 ],
-                                if (_featOn('tasks') &&
-                                    titleCtrl.text.trim().isNotEmpty) ...[
+                                if (_featOn('tasks')) ...[
                                   const SizedBox(height: 14),
                                   tasksSection(),
                                 ],
@@ -14688,256 +14773,6 @@ if (expanded && subTotal > 0) ...[
                                       crossAxisAlignment:
                                           CrossAxisAlignment.start,
                                       children: [
-                                        if (_featOn('checklist')) ...[
-                                        Row(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Expanded(
-                                              child: Text(
-                                                'Checkliste',
-                                                style: Theme.of(context)
-                                                    .textTheme
-                                                    .titleSmall
-                                                    ?.copyWith(
-                                                      fontWeight:
-                                                          FontWeight.w800,
-                                                      color: p.text,
-                                                    ),
-                                              ),
-                                            ),
-                                            IconButton(
-                                              tooltip: 'Vorlagen bearbeiten',
-                                              visualDensity:
-                                                  VisualDensity.compact,
-                                              padding: EdgeInsets.zero,
-                                              constraints: const BoxConstraints(
-                                                minWidth: 36,
-                                                minHeight: 36,
-                                              ),
-                                              icon: Icon(
-                                                Icons.tune_rounded,
-                                                size: 20,
-                                                color: p.muted,
-                                              ),
-                                              onPressed: () async {
-                                                await _openSubtaskQuickPresetsEditor();
-                                                if (mounted) setSheet(() {});
-                                              },
-                                            ),
-                                          ],
-                                        ),
-                                        if (draftSubtasks.isEmpty &&
-                                            _subtaskQuickPresets
-                                                .isNotEmpty) ...[
-                                          const SizedBox(height: 6),
-                                          SingleChildScrollView(
-                                            scrollDirection: Axis.horizontal,
-                                            child: Row(
-                                              children: [
-                                                for (final preset
-                                                    in _subtaskQuickPresets)
-                                                  Padding(
-                                                    padding:
-                                                        const EdgeInsets.only(
-                                                          right: 8,
-                                                          bottom: 2,
-                                                        ),
-                                                    child: ActionChip(
-                                                      label: Text(
-                                                        preset,
-                                                        style: TextStyle(
-                                                          color: p.text,
-                                                          fontWeight:
-                                                              FontWeight.w600,
-                                                          fontSize: 13,
-                                                        ),
-                                                      ),
-                                                      visualDensity:
-                                                          VisualDensity.compact,
-                                                      padding:
-                                                          const EdgeInsets.symmetric(
-                                                            horizontal: 10,
-                                                            vertical: 0,
-                                                          ),
-                                                      backgroundColor: p.chipBg,
-                                                      side: BorderSide(
-                                                        color: p.hairline,
-                                                      ),
-                                                      onPressed: () =>
-                                                          appendSubtaskFromPreset(
-                                                            preset,
-                                                          ),
-                                                    ),
-                                                  ),
-                                              ],
-                                            ),
-                                          ),
-                                        ] else ...[
-                                          const SizedBox(height: 4),
-                                          Text(
-                                            'Noch keine Schnell-Vorlagen — über das Symbol rechts eigene Einträge anlegen.',
-                                            style: Theme.of(context)
-                                                .textTheme
-                                                .bodySmall
-                                                ?.copyWith(
-                                                  color: p.muted,
-                                                  fontSize: 12.5,
-                                                  height: 1.35,
-                                                ),
-                                          ),
-                                        ],
-                                        const SizedBox(height: 8),
-                                        ...draftSubtasks.asMap().entries.map((
-                                          e,
-                                        ) {
-                                          final i = e.key;
-                                          final st = e.value;
-                                          final stCtrl =
-                                              subtaskCtrlById[st.id]!;
-                                          return Padding(
-                                            padding: const EdgeInsets.only(
-                                              bottom: 6,
-                                            ),
-                                            child: Row(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              children: [
-                                                GestureDetector(
-                                                  behavior:
-                                                      HitTestBehavior.opaque,
-                                                  onTap: () => setSheet(() {
-                                                    draftSubtasks[i] = st
-                                                        .copyWith(
-                                                          done: !st.done,
-                                                        );
-                                                  }),
-                                                  child: Padding(
-                                                    padding:
-                                                        const EdgeInsets.fromLTRB(
-                                                          4,
-                                                          3,
-                                                          12,
-                                                          4,
-                                                        ),
-                                                    child: AnimatedContainer(
-                                                      duration: const Duration(
-                                                        milliseconds: 160,
-                                                      ),
-                                                      width: 22,
-                                                      height: 22,
-                                                      decoration: BoxDecoration(
-                                                        shape: BoxShape.circle,
-                                                        color: st.done
-                                                            ? checkCol
-                                                            : Colors.transparent,
-                                                        border: Border.all(
-                                                          color: st.done
-                                                              ? checkCol
-                                                              : checkCol
-                                                                    .withValues(
-                                                                      alpha:
-                                                                          0.75,
-                                                                    ),
-                                                          width: 1.6,
-                                                        ),
-                                                      ),
-                                                      child: st.done
-                                                          ? Icon(
-                                                              Icons
-                                                                  .check_rounded,
-                                                              size: 15,
-                                                              color: p.bg,
-                                                            )
-                                                          : null,
-                                                    ),
-                                                  ),
-                                                ),
-                                                Expanded(
-                                                  child: TextField(
-                                                    key: ValueKey<String>(
-                                                      st.id,
-                                                    ),
-                                                    controller: stCtrl,
-                                                    style: TextStyle(
-                                                      color: p.text,
-                                                      fontWeight:
-                                                          FontWeight.w600,
-                                                    ),
-                                                    decoration:
-                                                        const InputDecoration(
-                                                          isDense: true,
-                                                          border:
-                                                              InputBorder.none,
-                                                        ),
-                                                  ),
-                                                ),
-                                                IconButton(
-                                                  visualDensity:
-                                                      VisualDensity.compact,
-                                                  icon: Icon(
-                                                    Icons.close_rounded,
-                                                    size: 18,
-                                                    color: p.muted,
-                                                  ),
-                                                  onPressed: () {
-                                                    setSheet(() {
-                                                      subtaskCtrlById
-                                                          .remove(st.id)
-                                                          ?.dispose();
-                                                      draftSubtasks.removeAt(i);
-                                                    });
-                                                  },
-                                                ),
-                                              ],
-                                            ),
-                                          );
-                                        }),
-                                        Row(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            IconButton(
-                                              visualDensity:
-                                                  VisualDensity.compact,
-                                              tooltip: 'Unterpunkt hinzufügen',
-                                              padding: EdgeInsets.zero,
-                                              constraints: const BoxConstraints(
-                                                minWidth: 40,
-                                                minHeight: 40,
-                                              ),
-                                              onPressed: appendSubtaskFromInput,
-                                              icon: Icon(
-                                                Icons.add_task_rounded,
-                                                size: 22,
-                                                color: p.muted,
-                                              ),
-                                            ),
-                                            Expanded(
-                                              child: TextField(
-                                                controller: subtaskInputCtrl,
-                                                maxLines: 1,
-                                                textInputAction:
-                                                    TextInputAction.done,
-                                                decoration: InputDecoration(
-                                                  hintText:
-                                                      'Unterpunkt hinzufügen …',
-                                                  hintStyle: TextStyle(
-                                                    color: p.muted,
-                                                  ),
-                                                  border: InputBorder.none,
-                                                  isDense: true,
-                                                ),
-                                                onSubmitted: (_) =>
-                                                    appendSubtaskFromInput(),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 12),
-                                        dividerRow(),
-                                        const SizedBox(height: 12),
-                                        ],
                                         if (!notesEditing &&
                                             notesCtrl.text.trim().isNotEmpty)
                                           GestureDetector(
@@ -16304,7 +16139,7 @@ if (expanded && subTotal > 0) ...[
       builder: (sheetContext) {
         final p = context.palette;
         final sw = MediaQuery.sizeOf(sheetContext).width;
-        final maxH = MediaQuery.sizeOf(sheetContext).height * 0.58;
+        final maxH = MediaQuery.sizeOf(sheetContext).height * 0.85;
         return Padding(
           padding: EdgeInsets.only(
             bottom: MediaQuery.viewInsetsOf(sheetContext).bottom,
@@ -16313,7 +16148,7 @@ if (expanded && subTotal > 0) ...[
             child: Padding(
               padding: const EdgeInsets.fromLTRB(12, 8, 12, 14),
               child: ConstrainedBox(
-                constraints: BoxConstraints(maxHeight: maxH.clamp(340, 620)),
+                constraints: BoxConstraints(maxHeight: maxH.clamp(340, 760)),
                 child: SingleChildScrollView(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -16330,7 +16165,7 @@ if (expanded && subTotal > 0) ...[
                         ),
                       ),
                       Text(
-                        'Preset & Flex',
+                        'Presets & Sortieren',
                         style: Theme.of(context).textTheme.titleLarge?.copyWith(
                           fontSize: 18,
                           fontWeight: FontWeight.w800,
@@ -16364,9 +16199,47 @@ if (expanded && subTotal > 0) ...[
                           height: 1.3,
                         ),
                       ),
+                      const SizedBox(height: 14),
+                      Container(
+                        decoration: BoxDecoration(
+                          color: p.surface,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: p.hairline),
+                        ),
+                        child: Column(
+                          children: [
+                            for (final it in <(IconData, String, Future<void> Function())>[
+                              (Icons.tune_rounded, 'Preset-Raster bearbeiten', () => _openPresetTaskTemplatesSheet()),
+                              (Icons.call_split_rounded, 'Variante erstellen (z. B. Sommer/Winter)', () => _createPresetVariantFlow()),
+                              (Icons.date_range_rounded, 'Preset-Zeitraum', () async => _openPresetWindowDialog()),
+                              (Icons.save_as_rounded, 'Tag als Preset speichern', () async => _saveDayAsPresetSheet()),
+                              (Icons.inventory_2_outlined, 'Presets verwalten / Archiv', () => _openPresetArchiveSheet()),
+                            ])
+                              ListTile(
+                                dense: true,
+                                leading: Icon(it.$1, color: p.accent, size: 22),
+                                title: Text(
+                                  it.$2,
+                                  style: TextStyle(
+                                    color: p.text,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                trailing: Icon(
+                                  Icons.chevron_right_rounded,
+                                  color: p.muted,
+                                ),
+                                onTap: () async {
+                                  Navigator.of(sheetContext).pop();
+                                  await it.$3();
+                                },
+                              ),
+                          ],
+                        ),
+                      ),
                       const SizedBox(height: 20),
                       Text(
-                        'Flex-Modus',
+                        'Blöcke sortieren',
                         style: Theme.of(context).textTheme.labelMedium
                             ?.copyWith(
                               color: p.muted,
@@ -16397,14 +16270,14 @@ if (expanded && subTotal > 0) ...[
                                 }
                               },
                               label: Text(
-                                'Flex Modus',
+                                'Sortieren',
                                 style: Theme.of(context).textTheme.labelLarge
                                     ?.copyWith(fontWeight: FontWeight.w600),
                               ),
                             ),
                           ),
                           IconButton(
-                            tooltip: 'Flex-Modus & Empfehlung',
+                            tooltip: 'Sortieren – Infos',
                             onPressed: () {
                               Navigator.of(sheetContext).pop();
                               _showFlexModeInfo();
@@ -16417,28 +16290,7 @@ if (expanded && subTotal > 0) ...[
                           ),
                         ],
                       ),
-                      const SizedBox(height: 16),
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: TextButton.icon(
-                          onPressed: () async {
-                            Navigator.of(sheetContext).pop();
-                            await _openPresetTaskTemplatesSheet();
-                          },
-                          icon: Icon(
-                            Icons.tune_rounded,
-                            size: 20,
-                            color: p.accent,
-                          ),
-                          label: Text(
-                            'Preset-Raster bearbeiten',
-                            style: TextStyle(
-                              color: p.accent,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                      ),
+                      const SizedBox(height: 4),
                     ],
                   ),
                 ),
@@ -16460,7 +16312,7 @@ if (expanded && subTotal > 0) ...[
         ).textTheme.bodyMedium?.copyWith(color: p.muted, height: 1.4);
         return AlertDialog(
           title: Text(
-            'Flex-Modus',
+            'Sortieren',
             style: Theme.of(
               ctx,
             ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
@@ -16491,7 +16343,7 @@ if (expanded && subTotal > 0) ...[
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  'Im Flex-Modus wählst du Blöcke durch Tippen auf Karte, Streifen links, Uhrzeit rechts '
+                  'Beim Sortieren wählst du Blöcke durch Tippen auf Karte, Streifen links, Uhrzeit rechts '
                   'oder den Auswahl-Kreis. Dann kannst du alle markierten normalen Zeitblöcke gemeinsam '
                   'nach vorne oder hinten schieben '
                   'über „Verschieben“ (Zifferblatt drehen) oder „+15“ / „−15“ (je 15 Minuten). '
@@ -16499,13 +16351,13 @@ if (expanded && subTotal > 0) ...[
                   'in die Markierung) und an einem Griff rechts (Striche) '
                   'festhalten und verschieben — sie wandern zusammen; am Ende gibt es ein '
                   'kurzes leichtes Vibrieren (Haptik). '
-                  'Kurz gedrückt halten auf einem Block öffnet die Bearbeitung (wie außerhalb des Flex-Modus). '
+                  'Kurz gedrückt halten auf einem Block öffnet die Bearbeitung (wie sonst auch). '
                   'So passt du den Tag an, wenn sich etwas verschiebt — ohne jeden Block einzeln zu öffnen.\n\n'
                   'Fixierte Blöcke, Ganztags- und Über-Nacht-Slots werden beim Schieben automatisch übersprungen. '
                   'Wenn etwas mit fixierten Stehblöcken kollidieren würde, wird der Plan danach bereinigt '
                   '(Teilen oder Verschieben an den Pin).\n\n'
                   'Mit „Merge“ kannst du mehrere ausgewählte Blöcke zusammenfassen. '
-                  'Ist der Flex-Modus aus, haben „+15“ und „−15“ keine Wirkung; Auswahl und Bearbeiten gehen trotzdem.',
+                  'Ist Sortieren aus, haben „+15“ und „−15“ keine Wirkung; Auswahl und Bearbeiten gehen trotzdem.',
                   style: bodyStyle,
                 ),
               ],
