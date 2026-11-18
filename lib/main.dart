@@ -2829,9 +2829,45 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
             x.endMin > now)
         .toList()
       ..sort((a, c) => a.startMin.compareTo(c.startMin));
-    // Start ist immer jetzt; begrenzt wird durch den nächsten festen Block.
+    // Start ist jetzt; läuft gerade ein fester Block, wird gefragt.
     var startAt = now;
-    final nextFixed = fixed.where((f) => f.startMin >= startAt).firstOrNull;
+    final runningFixed = fixed
+        .where((f) => f.startMin <= now && f.endMin > now)
+        .firstOrNull;
+    if (runningFixed != null) {
+      final c = await showDialog<String>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text(b.title),
+          content: Text(
+            '„${runningFixed.title}“ läuft noch bis ${_fmtMin(runningFixed.endMin)}.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Abbrechen'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, 'after'),
+              child: Text('Danach (${_fmtMin(runningFixed.endMin)})'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, 'now'),
+              child: Text('Jetzt – ${runningFixed.title} beenden'),
+            ),
+          ],
+        ),
+      );
+      if (c == null || !mounted) return;
+      if (c == 'after') {
+        startAt = runningFixed.endMin;
+      } else {
+        runningFixed.endMin = max(runningFixed.startMin + 5, now);
+      }
+    }
+    final nextFixed = fixed
+        .where((f) => f.startMin >= startAt && !identical(f, runningFixed))
+        .firstOrNull;
     final limit = nextFixed?.startMin ?? 1440;
     var window = limit - startAt;
     var dur = window.clamp(lo, hi);
