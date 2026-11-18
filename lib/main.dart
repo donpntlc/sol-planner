@@ -1118,7 +1118,6 @@ const String _kFeatureTogglesPrefKey = 'planner_feature_toggles_v1';
 const List<({String id, String label, String sub, IconData icon})> _kFeatures = [
   (id: 'tasks', label: 'Aufgaben', sub: 'Punkte im Block – nur für ihn oder mitwandernd', icon: Icons.format_list_numbered_rounded),
   (id: 'macros', label: 'Makros', sub: 'Makros aus PREPIT pro Mahlzeit', icon: Icons.restaurant_menu_rounded),
-  (id: 'plan', label: 'Must-Do & flexibel', sub: 'Must-/Can-Do, flexible Blöcke mit Dauer-Spanne', icon: Icons.flag_rounded),
   (id: 'timer', label: 'Timer & Zeiten', sub: 'Zeit stoppen, Done-Liste, Tag/Woche', icon: Icons.timer_rounded),
   (id: 'phone', label: 'Erinnerung aufs Handy', sub: 'Knopf für Kalender-Erinnerungen im Block', icon: Icons.phone_iphone_rounded),
 ];
@@ -2584,7 +2583,8 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
   String _overlapMode = 'ask';
   // „Fokus & Pausen“ ist durch den Timer ersetzt.
   bool _featOn(String id) {
-    if (id == 'focus') return false;
+    // 'plan' (Must-/Can-Do, flexibel, „Als Nächstes“) vorerst ausgeblendet.
+    if (id == 'focus' || id == 'plan') return false;
     if (id == 'checklist') id = 'tasks';
     return !_featuresOff.contains(id);
   }
