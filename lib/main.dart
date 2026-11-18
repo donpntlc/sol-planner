@@ -1115,7 +1115,7 @@ const String _kFeatureTogglesPrefKey = 'planner_feature_toggles_v1';
 
 /// Schaltbare Funktionen (Einstellungen → Funktionen).
 const List<({String id, String label, String sub, IconData icon})> _kFeatures = [
-  (id: 'tasks', label: 'Aufgaben', sub: 'Punkte im Block – nur für ihn oder ↻ mitwandernd', icon: Icons.format_list_numbered_rounded),
+  (id: 'tasks', label: 'Aufgaben', sub: 'Punkte im Block – nur für ihn oder mitwandernd', icon: Icons.format_list_numbered_rounded),
   (id: 'macros', label: 'Makros', sub: 'Makros aus PREPIT pro Mahlzeit', icon: Icons.restaurant_menu_rounded),
   (id: 'plan', label: 'Must-Do & flexibel', sub: 'Must-/Can-Do, flexible Blöcke mit Dauer-Spanne', icon: Icons.flag_rounded),
   (id: 'timer', label: 'Timer & Zeiten', sub: 'Zeit stoppen, Done-Liste, Tag/Woche', icon: Icons.timer_rounded),
@@ -2829,11 +2829,8 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
             x.endMin > now)
         .toList()
       ..sort((a, c) => a.startMin.compareTo(c.startMin));
-    // Steht gerade ein fester Block an, beginnt die freie Zeit danach.
+    // Start ist immer jetzt; begrenzt wird durch den nächsten festen Block.
     var startAt = now;
-    for (final f in fixed) {
-      if (f.startMin <= startAt && f.endMin > startAt) startAt = f.endMin;
-    }
     final nextFixed = fixed.where((f) => f.startMin >= startAt).firstOrNull;
     final limit = nextFixed?.startMin ?? 1440;
     var window = limit - startAt;
@@ -13926,7 +13923,7 @@ if (expanded && subTotal > 0) ...[
                     Text(
                       key == 'circle'
                           ? 'Solange To-Dos offen sind, stehen sie vorne und der Circle rückt nicht weiter.'
-                          : '↻ = wandert in den nächsten gleichen Block, bis abgehakt. Ohne ↻ gilt der Punkt nur für diesen Block.',
+                          : 'Mit Kreispfeil wandert ein Punkt in den nächsten gleichen Block, bis er abgehakt ist. Ohne gilt er nur für diesen Block. Tippe links neben dem Eingabefeld zum Umschalten.',
                       style: TextStyle(color: p.muted, fontSize: 12, height: 1.35),
                     ),
                     const SizedBox(height: 8),
