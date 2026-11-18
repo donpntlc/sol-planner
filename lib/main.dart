@@ -522,6 +522,14 @@ class TimeBlock {
     this.muteReminders = false,
     List<BlockSessionSegment>? sessionSegments,
     this.fromPreset,
+    this.must = false,
+    this.flex = false,
+    this.spanMin,
+    this.spanMax,
+    this.workKind,
+    this.frog = false,
+    this.planSet = false,
+    this.planStarted = false,
   }) : subtasks = List<BlockSubtask>.from(subtasks ?? const []),
        sessionSegments =
            List<BlockSessionSegment>.from(sessionSegments ?? const []);
@@ -560,6 +568,26 @@ class TimeBlock {
   /// true = kam aus einem Preset, false = einzeln eingetragen, null = alt/unbekannt.
   /// Beim Laden eines Presets werden nur Preset-Blöcke ersetzt.
   bool? fromPreset;
+
+  /// Must-Do (muss heute passieren) vs. Can-Do.
+  bool must;
+
+  /// Flexibel: Uhrzeit frei wählbar, Dauer in [spanMin]–[spanMax] Minuten.
+  bool flex;
+  int? spanMin;
+  int? spanMax;
+
+  /// 'routine' (Morgen-/Abendroutine), 'fokus', 'zuegig'.
+  String? workKind;
+
+  /// Eat the frog: unbeliebt → zuerst.
+  bool frog;
+
+  /// Planungsangaben wurden schon gesetzt (vom Nutzer oder Standard).
+  bool planSet;
+
+  /// Flexibler Block wurde per ▶ gestartet.
+  bool planStarted;
 
   /// Gleicher Kalendertag [0,1440): Start vor Ende.
   bool get isLinearSlot => !allDay && startMin < endMin;
@@ -630,11 +658,27 @@ class TimeBlock {
       completed: completed ?? this.completed,
       muteReminders: muteReminders ?? this.muteReminders,
       fromPreset: fromPreset,
+      must: must,
+      flex: flex,
+      spanMin: spanMin,
+      spanMax: spanMax,
+      workKind: workKind,
+      frog: frog,
+      planSet: planSet,
+      planStarted: planStarted,
     );
   }
 
   Map<String, dynamic> toJson() => {
+    if (planStarted) 'pst': true,
     if (fromPreset != null) 'fp': fromPreset,
+    if (must) 'must': true,
+    if (flex) 'flx': true,
+    if (spanMin != null) 'smin': spanMin,
+    if (spanMax != null) 'smax': spanMax,
+    if (workKind != null) 'wk': workKind,
+    if (frog) 'frog': true,
+    if (planSet) 'ps': true,
     'id': id,
     'title': title,
     'startMin': startMin,
@@ -713,6 +757,14 @@ class TimeBlock {
       muteReminders: j['muteReminders'] as bool? ?? false,
       sessionSegments: segs,
       fromPreset: j['fp'] as bool?,
+      must: j['must'] == true,
+      flex: j['flx'] == true,
+      spanMin: (j['smin'] as num?)?.toInt(),
+      spanMax: (j['smax'] as num?)?.toInt(),
+      workKind: j['wk'] as String?,
+      frog: j['frog'] == true,
+      planSet: j['ps'] == true,
+      planStarted: j['pst'] == true,
     );
   }
 }
@@ -812,7 +864,20 @@ class PresetTaskLine {
     this.stripeHex,
     this.iconCode,
     List<String>? subtasks,
+    this.must = false,
+    this.flex = false,
+    this.spanMin,
+    this.spanMax,
+    this.workKind,
+    this.frog = false,
   }) : subtasks = List<String>.unmodifiable(subtasks ?? const []);
+
+  final bool must;
+  final bool flex;
+  final int? spanMin;
+  final int? spanMax;
+  final String? workKind;
+  final bool frog;
 
   final String title;
   final int startMin;
@@ -847,10 +912,22 @@ class PresetTaskLine {
       stripeHex: stripeHex,
       iconCode: iconCode,
       subtasks: subtasks,
+      must: must,
+      flex: flex,
+      spanMin: spanMin,
+      spanMax: spanMax,
+      workKind: workKind,
+      frog: frog,
     );
   }
 
   Map<String, dynamic> toJson() => {
+    if (must) 'must': true,
+    if (flex) 'flx': true,
+    if (spanMin != null) 'smin': spanMin,
+    if (spanMax != null) 'smax': spanMax,
+    if (workKind != null) 'wk': workKind,
+    if (frog) 'frog': true,
     'title': title,
     'startMin': startMin,
     'endMin': endMin,
@@ -878,6 +955,12 @@ class PresetTaskLine {
         for (final x in (j['subtasks'] as List? ?? const []))
           if (x is String && x.trim().isNotEmpty) x,
       ],
+      must: j['must'] == true,
+      flex: j['flx'] == true,
+      spanMin: (j['smin'] as num?)?.toInt(),
+      spanMax: (j['smax'] as num?)?.toInt(),
+      workKind: j['wk'] as String?,
+      frog: j['frog'] == true,
     );
   }
 }
@@ -1034,6 +1117,7 @@ const String _kFeatureTogglesPrefKey = 'planner_feature_toggles_v1';
 const List<({String id, String label, String sub, IconData icon})> _kFeatures = [
   (id: 'tasks', label: 'Aufgaben', sub: 'Punkte im Block – nur für ihn oder ↻ mitwandernd', icon: Icons.format_list_numbered_rounded),
   (id: 'macros', label: 'Makros', sub: 'Makros aus PREPIT pro Mahlzeit', icon: Icons.restaurant_menu_rounded),
+  (id: 'plan', label: 'Must-Do & flexibel', sub: 'Must-/Can-Do, flexible Blöcke mit Dauer-Spanne', icon: Icons.flag_rounded),
   (id: 'timer', label: 'Timer & Zeiten', sub: 'Zeit stoppen, Done-Liste, Tag/Woche', icon: Icons.timer_rounded),
   (id: 'phone', label: 'Erinnerung aufs Handy', sub: 'Knopf für Kalender-Erinnerungen im Block', icon: Icons.phone_iphone_rounded),
 ];
@@ -1246,7 +1330,51 @@ bool _isMorningRoutineTitle(String t) {
 }
 
 /// Variant von [PlannerPresetType.hustle]: Wecken 05:30, späterer Abend, Schlaffenster bis 05:30.
-List<PresetTaskLine> builtinHustle530Lines() => [
+List<PresetTaskLine> builtinHustle530Lines() =>
+    _rawHustle530Lines().map(planDefaults530).toList();
+
+List<PresetTaskLine> builtinP530Lines() =>
+    _rawP530Lines().map(planDefaults530).toList();
+
+/// Standard für 5:30: Must-Dos (Morgenroutine, Training, Abendroutine, Schlafen)
+/// und flexible Blöcke (Morgenroutine 60–90, Deep Work 60–120).
+PresetTaskLine planDefaults530(PresetTaskLine l) {
+  if (l.must || l.flex) return l;
+  final t = l.title.trim().toLowerCase();
+  PresetTaskLine w({
+    bool must = false,
+    bool flex = false,
+    int? smin,
+    int? smax,
+    String? kind,
+  }) => PresetTaskLine(
+    title: l.title,
+    startMin: l.startMin,
+    endMin: l.endMin,
+    colorLabel: l.colorLabel,
+    notes: l.notes,
+    stripeHex: l.stripeHex,
+    iconCode: l.iconCode,
+    subtasks: l.subtasks,
+    must: must,
+    flex: flex,
+    spanMin: smin,
+    spanMax: smax,
+    workKind: kind,
+  );
+  if (t == 'morgen routine') {
+    return w(must: true, flex: true, smin: 60, smax: 90, kind: 'routine');
+  }
+  if (t == 'deep work') {
+    return w(flex: true, smin: 60, smax: 120, kind: 'fokus');
+  }
+  if (t.startsWith('gym |')) return w(must: true);
+  if (t == 'abendroutine') return w(must: true);
+  if (t == 'go to bed') return w(must: true);
+  return l;
+}
+
+List<PresetTaskLine> _rawHustle530Lines() => [
       PresetTaskLine(
         title: 'Morgen Routine',
         startMin: 330,
@@ -1341,7 +1469,7 @@ List<PresetTaskLine> builtinHustle530Lines() => [
 
 /// Vorlagen wie zuvor in `_buildPresetBlocks`; Überschreibungen kommen aus SharedPreferences.
 /// Deans neues 5:30-Preset (aus der Tagespläne-Seite übernommen, 12.11.2026).
-List<PresetTaskLine> builtinP530Lines() => [
+List<PresetTaskLine> _rawP530Lines() => [
       PresetTaskLine(
         title: 'Morgen Routine',
         startMin: 330,
@@ -2461,6 +2589,344 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
   }
 
   final TimerStore _timerStore = TimerStore();
+
+  /// Offene flexible Blöcke von heute in Vorschlags-Reihenfolge:
+  /// Morgenroutine → Frösche → Rest (Plan-Reihenfolge) → Abendroutine.
+  List<TimeBlock> _openFlexToday() {
+    final day = _getBlocksForDay(DateTime.now());
+    final nowMin = _nowWallClockMinutes();
+    int group(TimeBlock b) {
+      if (b.workKind == 'routine') return b.startMin < 720 ? 0 : 3;
+      if (b.frog) return 1;
+      return 2;
+    }
+
+    final l = day
+        .where((b) =>
+            b.flex &&
+            !b.completed &&
+            !b.allDay &&
+            b.isLinearSlot &&
+            // läuft gerade → nicht als „nächstes“ vorschlagen
+            !(b.startMin <= nowMin && b.endMin > nowMin && b.planStarted))
+        .toList()
+      ..sort((a, b) {
+        final g = group(a).compareTo(group(b));
+        if (g != 0) return g;
+        return a.startMin.compareTo(b.startMin);
+      });
+    return l;
+  }
+
+  TimeBlock? _runningFlexNow() {
+    final nowMin = _nowWallClockMinutes();
+    for (final b in _getBlocksForDay(DateTime.now())) {
+      if (b.flex && !b.completed && b.planStarted &&
+          b.startMin <= nowMin && b.endMin > nowMin) {
+        return b;
+      }
+    }
+    return null;
+  }
+
+  String _spanLabel(TimeBlock b) => b.spanMin != null && b.spanMax != null
+      ? '${b.spanMin}–${b.spanMax} min'
+      : _humanDuration(b.duration);
+
+  Widget _flexNextBar(double hPad) {
+    final open = _openFlexToday();
+    if (open.isEmpty) return const SizedBox.shrink();
+    final p = context.palette;
+    final next = open.first;
+    final col = _stripeForBlock(next);
+    return Padding(
+      padding: EdgeInsets.fromLTRB(hPad, 0, hPad, 6),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560),
+          child: Material(
+            color: p.surface,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: BorderSide(color: p.hairline),
+            ),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(16),
+              onTap: _openFlexSheet,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 8, 6, 8),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 4,
+                      height: 30,
+                      decoration: BoxDecoration(
+                        color: col,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'ALS NÄCHSTES · FLEXIBEL${open.length > 1 ? ' (+${open.length - 1})' : ''}',
+                            style: TextStyle(
+                              color: p.muted,
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.6,
+                            ),
+                          ),
+                          Text(
+                            '${next.frog ? '🐸 ' : ''}${next.title} · ${_spanLabel(next)}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: p.text,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Jetzt starten',
+                      onPressed: () => unawaited(_startFlexBlock(next)),
+                      icon: Icon(Icons.play_circle_fill_rounded, color: col, size: 32),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openFlexSheet() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        final p = ctx.palette;
+        final open = _openFlexToday();
+        final running = _runningFlexNow();
+        String kindLabel(String? k) => switch (k) {
+              'routine' => 'Routine',
+              'fokus' => 'Fokus',
+              'zuegig' => 'Zügig',
+              _ => '',
+            };
+        return ClipRRect(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+          child: Material(
+            color: p.surface,
+            child: SafeArea(
+              top: false,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.sizeOf(ctx).height * 0.85,
+                ),
+                child: ListView(
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
+                  children: [
+                    Text(
+                      'Flexibel heute',
+                      style: TextStyle(
+                        color: p.text,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Tippe ▶, wenn du loslegst. Der Block füllt die freie Zeit bis zum nächsten festen Block – innerhalb seiner Spanne. Läuft schon einer, wird er dabei als erledigt beendet.',
+                      style: TextStyle(color: p.muted, fontSize: 12.5, height: 1.35),
+                    ),
+                    if (running != null) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        'LÄUFT: ${running.title} bis ${_fmtMin(running.endMin)}',
+                        style: TextStyle(
+                          color: p.accent,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 10),
+                    for (var i = 0; i < open.length; i++)
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: Container(
+                          width: 4,
+                          height: 34,
+                          decoration: BoxDecoration(
+                            color: _stripeForBlock(open[i]),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                        title: Text(
+                          '${open[i].frog ? '🐸 ' : ''}${open[i].title}',
+                          style: TextStyle(
+                            color: p.text,
+                            fontWeight: i == 0 ? FontWeight.w800 : FontWeight.w600,
+                          ),
+                        ),
+                        subtitle: Text(
+                          [
+                            if (open[i].must) 'Must-Do' else 'Can-Do',
+                            _spanLabel(open[i]),
+                            if (kindLabel(open[i].workKind).isNotEmpty)
+                              kindLabel(open[i].workKind),
+                            'geplant ${_fmtMin(open[i].startMin)}',
+                          ].join(' · '),
+                          style: TextStyle(color: p.muted, fontSize: 12),
+                        ),
+                        trailing: IconButton(
+                          icon: Icon(
+                            Icons.play_circle_fill_rounded,
+                            color: _stripeForBlock(open[i]),
+                            size: 30,
+                          ),
+                          onPressed: () {
+                            Navigator.pop(ctx);
+                            unawaited(_startFlexBlock(open[i]));
+                          },
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  /// Flexiblen Block jetzt starten: füllt die Zeit bis zum nächsten festen Block,
+  /// begrenzt auf seine Spanne. Ein laufender flexibler Block wird beendet.
+  Future<void> _startFlexBlock(TimeBlock b) async {
+    final today = _onlyDay(DateTime.now());
+    final day = _getBlocksForDay(today);
+    var now = _nowWallClockMinutes();
+    now = now - now % 5; // auf 5 Minuten abrunden
+    final lo = b.spanMin ?? b.duration;
+    final hi = max(lo, b.spanMax ?? b.duration);
+    final fixed = day
+        .where((x) =>
+            !identical(x, b) &&
+            !x.flex &&
+            !x.allDay &&
+            x.isLinearSlot &&
+            !x.completed &&
+            x.endMin > now)
+        .toList()
+      ..sort((a, c) => a.startMin.compareTo(c.startMin));
+    // Steht gerade ein fester Block an, beginnt die freie Zeit danach.
+    var startAt = now;
+    for (final f in fixed) {
+      if (f.startMin <= startAt && f.endMin > startAt) startAt = f.endMin;
+    }
+    final nextFixed = fixed.where((f) => f.startMin >= startAt).firstOrNull;
+    final limit = nextFixed?.startMin ?? 1440;
+    var window = limit - startAt;
+    var dur = window.clamp(lo, hi);
+    if (window < lo) {
+      final choice = await showDialog<String>(
+        context: context,
+        builder: (c) => AlertDialog(
+          title: Text(b.title),
+          content: Text(
+            'Bis ${nextFixed?.title ?? 'Tagesende'} (${_fmtMin(limit)}) sind nur noch $window min frei – Minimum sind $lo min.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(c),
+              child: const Text('Abbrechen'),
+            ),
+            if (window >= 5)
+              TextButton(
+                onPressed: () => Navigator.pop(c, 'short'),
+                child: Text('Jetzt $window min'),
+              ),
+            if (nextFixed != null)
+              TextButton(
+                onPressed: () => Navigator.pop(c, 'after'),
+                child: Text('Nach ${nextFixed.title}'),
+              ),
+          ],
+        ),
+      );
+      if (choice == null || !mounted) return;
+      if (choice == 'short') {
+        dur = window;
+      } else {
+        startAt = nextFixed!.endMin;
+        final nf2 = fixed.where((f) => f.startMin >= startAt).firstOrNull;
+        dur = ((nf2?.startMin ?? 1440) - startAt).clamp(lo, hi);
+      }
+    }
+    _recordUndoSnapshot();
+    setState(() {
+      // Laufenden flexiblen Block beenden (= erledigt).
+      final run = _runningFlexNow();
+      if (run != null && !identical(run, b)) {
+        run.endMin = max(run.startMin + 5, now);
+        run.completed = true;
+        _syncProjectRotationForBlock(run);
+      }
+      b.startMin = startAt;
+      b.endMin = min(1440, startAt + dur);
+      b.planStarted = true;
+      // Andere offene flexible Blöcke, die jetzt im Weg sind, dahinter schieben
+      // (über feste Blöcke hinweg).
+      var cursor = b.endMin;
+      final others = day
+          .where((x) =>
+              !identical(x, b) &&
+              x.flex &&
+              !x.completed &&
+              x.isLinearSlot &&
+              x.endMin > b.startMin)
+          .toList()
+        ..sort((a, c) => a.startMin.compareTo(c.startMin));
+      for (final x in others) {
+        if (x.startMin >= cursor) break;
+        final d = x.duration;
+        var st = cursor;
+        for (final f in fixed) {
+          if (st < f.endMin && st + d > f.startMin) st = f.endMin;
+        }
+        x.startMin = st;
+        x.endMin = min(1440, st + d);
+        cursor = x.endMin;
+      }
+      _sortBlocksChronologically(day);
+    });
+    _schedulePersistDayPlans();
+    if (_featOn('timer')) {
+      _timerStore.start(
+        title: b.title,
+        kind: _taskKey(b.title),
+        targetSecs: (b.endMin - b.startMin) * 60,
+      );
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+      SnackBar(
+        content: Text(
+          '${b.title}: ${_fmtMin(b.startMin)}–${_fmtMin(b.endMin)} (${b.endMin - b.startMin} min)',
+        ),
+      ),
+    );
+  }
 
   /// Timer für einen Block starten (Ziel = Restzeit, wenn er gerade läuft, sonst Blocklänge).
   void _startTimerForBlock(TimeBlock b) {
@@ -4224,6 +4690,12 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
           stripeHex: b.customStripeHex,
           iconCode: b.customIconCodePoint,
           subtasks: [for (final st in b.subtasks) st.title],
+          must: b.must,
+          flex: b.flex,
+          spanMin: b.spanMin,
+          spanMax: b.spanMax,
+          workKind: b.workKind,
+          frog: b.frog,
         ),
     ];
     setState(() => _presetTaskOverrides[picked] = lines);
@@ -6967,6 +7439,21 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
         }
         await prefs.setBool(migKey, true);
       }
+      const migMust = 'planner_mig_mustflex_v1';
+      if (prefs.getBool(migMust) != true) {
+        var changed = false;
+        for (final t in [PlannerPresetType.p530, PlannerPresetType.hustle530]) {
+          final l = _presetTaskOverrides[t];
+          if (l == null) continue;
+          _presetTaskOverrides[t] = l.map(planDefaults530).toList();
+          changed = true;
+        }
+        if (changed) {
+          if (mounted) setState(_refreshPresetVariants);
+          await _savePresetTaskOverrides();
+        }
+        await prefs.setBool(migMust, true);
+      }
       const migBible = 'planner_mig_bible_15_45_v1';
       if (prefs.getBool(migBible) != true) {
         var changed = false;
@@ -7014,7 +7501,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
   }
 
   TimeBlock _blockFromPresetLine(PresetTaskLine line) {
-    return _enrichMorningRoutine(
+    return _planFromLine(_enrichMorningRoutine(
       _markFromPreset(
       _newBlock(
         line.title.isEmpty ? 'Block' : line.title,
@@ -7031,11 +7518,23 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
         ],
       ),
       ),
-    );
+    ), line);
   }
 
   TimeBlock _markFromPreset(TimeBlock b) {
     b.fromPreset = true;
+    return b;
+  }
+
+  TimeBlock _planFromLine(TimeBlock b, PresetTaskLine l) {
+    b
+      ..must = l.must
+      ..flex = l.flex
+      ..spanMin = l.spanMin
+      ..spanMax = l.spanMax
+      ..workKind = l.workKind
+      ..frog = l.frog
+      ..planSet = l.must || l.flex || l.frog || l.workKind != null;
     return b;
   }
 
@@ -7159,6 +7658,23 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
 
   /// Bereits angelegte 5:30-Tage an Deans aktuellen 5:30-Plan angleichen.
   void _update530Block(TimeBlock b) {
+    if (!b.planSet && !b.completed) {
+      final l = planDefaults530(
+        PresetTaskLine(
+          title: b.title,
+          startMin: b.startMin,
+          endMin: b.endMin,
+          colorLabel: b.colorLabel,
+        ),
+      );
+      b
+        ..must = l.must
+        ..flex = l.flex
+        ..spanMin = l.spanMin
+        ..spanMax = l.spanMax
+        ..workKind = l.workKind
+        ..planSet = true;
+    }
     if (b.title.trim() == 'Cyrcle block') b.title = 'Cyrcle Block';
     if (b.title.trim() == 'Bibel Study 45min') b.title = 'Bible Study 45min';
     if (b.title.trim() == 'Bibel Study 15min') b.title = 'Bible Study 15min';
@@ -8420,6 +8936,26 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                                       color: context.palette.muted,
                                     ),
                                   ),
+                                if (_featOn('plan') &&
+                                    blocks.any((b) => b.must))
+                                  Padding(
+                                    padding: const EdgeInsets.only(right: 10),
+                                    child: Text(
+                                      'Must ${blocks.where((b) => b.must && b.completed).length}/${blocks.where((b) => b.must).length}',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .labelLarge
+                                          ?.copyWith(
+                                            fontSize: 13.5,
+                                            fontWeight: FontWeight.w800,
+                                            color: blocks
+                                                    .where((b) => b.must)
+                                                    .every((b) => b.completed)
+                                                ? context.palette.accent
+                                                : context.palette.text,
+                                          ),
+                                    ),
+                                  ),
                                 if (totalCount > 0)
                                   Text(
                                     '$doneCount/$totalCount',
@@ -8496,6 +9032,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
                 ),
               ),
             ),
+            if (isViewingToday && _featOn('plan')) _flexNextBar(listHPad),
             Expanded(
               child: ClipRect(
                 child: Align(
@@ -9414,15 +9951,26 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
 
   /// Zeigt die Blockdauer, oder wenn der Slot gerade läuft (nur wenn der angezeigte Tag [heute] ist): „noch …“ plus Restzeit.
   String _blockDurationSubtitle(TimeBlock block) {
-    if (_onlyDay(_selectedDate) != _onlyDay(DateTime.now())) {
+    final plan = _featOn('plan');
+    final pre = !plan
+        ? ''
+        : '${block.must ? 'Must-Do · ' : ''}${block.flex && block.frog ? '🐸 ' : ''}';
+    String base() {
+      if (plan && block.flex && block.spanMin != null && block.spanMax != null) {
+        return 'flexibel ${block.spanMin}–${block.spanMax} min';
+      }
       return _humanDuration(block.duration);
+    }
+
+    if (_onlyDay(_selectedDate) != _onlyDay(DateTime.now())) {
+      return '$pre${base()}';
     }
     final nowMin = DateTime.now().hour * 60 + DateTime.now().minute;
     final remain = _remainingMinutesIfBlockActiveNow(block, nowMin);
     if (remain != null && remain > 0) {
-      return 'noch ${_humanDuration(remain)}';
+      return '${pre}noch ${_humanDuration(remain)}';
     }
-    return _humanDuration(block.duration);
+    return '$pre${base()}';
   }
 
   /// Minuten bis Blockende, wenn „jetzt“ innerhalb dieses Slots liegt; sonst `null`.
@@ -12154,6 +12702,12 @@ if (expanded && subTotal > 0) ...[
       stripeHex: x.customStripeHex,
       iconCode: x.customIconCodePoint,
       subtasks: [for (final st in x.subtasks) st.title],
+      must: x.must,
+      flex: x.flex,
+      spanMin: x.spanMin,
+      spanMax: x.spanMax,
+      workKind: x.workKind,
+      frog: x.frog,
     );
     List<PresetTaskLine> merged(List<PresetTaskLine> cur) {
       final out = [for (final l in cur) l.copy()];
@@ -12222,7 +12776,14 @@ if (expanded && subTotal > 0) ...[
             ..colorLabel = b.colorLabel
             ..notes = b.notes
             ..customStripeHex = b.customStripeHex
-            ..customIconCodePoint = b.customIconCodePoint;
+            ..customIconCodePoint = b.customIconCodePoint
+            ..must = b.must
+            ..flex = b.flex
+            ..spanMin = b.spanMin
+            ..spanMax = b.spanMax
+            ..workKind = b.workKind
+            ..frog = b.frog
+            ..planSet = true;
           touched = true;
         }
         if (touched) {
@@ -12264,6 +12825,12 @@ if (expanded && subTotal > 0) ...[
     var notesEditing = false;
     final taskAddCtrl = TextEditingController();
     bool? addWander;
+    var dMust = editing?.must ?? false;
+    var dFlex = editing?.flex ?? false;
+    var dSmin = editing?.spanMin;
+    var dSmax = editing?.spanMax;
+    var dKind = editing?.workKind;
+    var dFrog = editing?.frog ?? false;
     final notesCtrl = TextEditingController(text: editing?.notes ?? '');
     final subtaskInputCtrl = TextEditingController();
 
@@ -12694,6 +13261,16 @@ if (expanded && subTotal > 0) ...[
         _ensureDayExists(_selectedDate);
         final dayFinal = _days[_onlyDay(_selectedDate)]!;
         anchorBlockOut = anchorBlock;
+        if (anchorBlock != null && _featOn('plan')) {
+          anchorBlock
+            ..must = dMust
+            ..flex = dFlex
+            ..spanMin = dFlex ? dSmin : null
+            ..spanMax = dFlex ? dSmax : null
+            ..workKind = dFlex ? dKind : null
+            ..frog = dFlex && dFrog
+            ..planSet = true;
+        }
         if (anchorBlock != null) _makeRoomForBlock(dayFinal, anchorBlock);
         _repairOverlapsWithPins(dayFinal);
         _repairUnpinnedLinearOverlaps(dayFinal);
@@ -13148,6 +13725,124 @@ if (expanded && subTotal > 0) ...[
                 (!useCategoryStripe && draftCustomStripeHex != null)
                 ? _colorFromHexString(draftCustomStripeHex!)
                 : _stripeColor(colorLabel);
+            Widget planSection() {
+              final c = checkCol;
+              final dur = allDay ? 60 : _spanMinutesRaw(draftStart, draftEnd);
+              final lo = (dSmin ?? (dur * 0.5).round()).clamp(5, 240).toDouble();
+              final hi = (dSmax ?? dur).clamp(5, 240).toDouble();
+              Widget chip(String label, bool sel, VoidCallback onTap) =>
+                  ChoiceChip(
+                    label: Text(label),
+                    selected: sel,
+                    showCheckmark: false,
+                    selectedColor: c.withValues(alpha: 0.25),
+                    side: BorderSide(color: sel ? c : p.hairline),
+                    onSelected: (_) => onTap(),
+                  );
+              return Container(
+                padding: const EdgeInsets.fromLTRB(16, 12, 12, 10),
+                decoration: BoxDecoration(
+                  color: p.surface,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: p.hairline),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Planung',
+                      style: TextStyle(
+                        color: p.text,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 15.5,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 6,
+                      children: [
+                        chip('Must-Do', dMust, () => setSheet(() => dMust = true)),
+                        chip('Can-Do', !dMust, () => setSheet(() => dMust = false)),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      dMust
+                          ? 'Muss heute passieren – bleibt sichtbar, bis erledigt.'
+                          : 'Gehört zum optimalen Tag – darf ausfallen, wenn es eng wird.',
+                      style: TextStyle(color: p.muted, fontSize: 12, height: 1.35),
+                    ),
+                    const SizedBox(height: 6),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      dense: true,
+                      value: dFlex,
+                      activeColor: c,
+                      title: Text(
+                        'Flexibel',
+                        style: TextStyle(color: p.text, fontWeight: FontWeight.w700),
+                      ),
+                      subtitle: Text(
+                        'Uhrzeit frei – du startest ihn, wenn es passt.',
+                        style: TextStyle(color: p.muted, fontSize: 12),
+                      ),
+                      onChanged: (v) => setSheet(() {
+                        dFlex = v;
+                        if (v) {
+                          dSmin ??= lo.round();
+                          dSmax ??= hi.round();
+                        }
+                      }),
+                    ),
+                    if (dFlex) ...[
+                      Text(
+                        'Dauer: ${lo.round()}–${hi.round()} min',
+                        style: TextStyle(color: p.text, fontWeight: FontWeight.w600),
+                      ),
+                      RangeSlider(
+                        min: 5,
+                        max: 240,
+                        divisions: 47,
+                        values: RangeValues(lo, hi < lo ? lo : hi),
+                        activeColor: c,
+                        onChanged: (v) => setSheet(() {
+                          dSmin = (v.start / 5).round() * 5;
+                          dSmax = (v.end / 5).round() * 5;
+                        }),
+                      ),
+                      Text(
+                        'Art',
+                        style: TextStyle(color: p.muted, fontSize: 12, fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: 4),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 6,
+                        children: [
+                          chip('Morgen-/Abendroutine', dKind == 'routine',
+                              () => setSheet(() => dKind = dKind == 'routine' ? null : 'routine')),
+                          chip('Fokus', dKind == 'fokus',
+                              () => setSheet(() => dKind = dKind == 'fokus' ? null : 'fokus')),
+                          chip('Zügig', dKind == 'zuegig',
+                              () => setSheet(() => dKind = dKind == 'zuegig' ? null : 'zuegig')),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      FilterChip(
+                        label: const Text('🐸 Frosch – zuerst erledigen'),
+                        selected: dFrog,
+                        showCheckmark: false,
+                        selectedColor: c.withValues(alpha: 0.25),
+                        side: BorderSide(color: dFrog ? c : p.hairline),
+                        onSelected: (v) => setSheet(() => dFrog = v),
+                      ),
+                    ],
+                  ],
+                ),
+              );
+            }
+
             Widget tasksSection() {
               final key = _taskKey(titleCtrl.text);
               final hasTitle = titleCtrl.text.trim().isNotEmpty;
@@ -14743,6 +15438,10 @@ if (expanded && subTotal > 0) ...[
                                     ),
                                   ),
                                 ),
+                                ],
+                                if (_featOn('plan') && !allDay) ...[
+                                  const SizedBox(height: 14),
+                                  planSection(),
                                 ],
                                 if (_featOn('macros') &&
                                     !_macroPlan.isEmpty &&
@@ -18289,7 +18988,11 @@ class _PresetRowCtrls {
     required this.endMin,
     required this.colorLabel,
     required this.allowedCategories,
+    this.orig,
   });
+
+  /// Ursprüngliche Zeile – Farbe, Symbol, Checkliste, Must/Flex bleiben erhalten.
+  final PresetTaskLine? orig;
 
   factory _PresetRowCtrls.fromLine(
     String rowId,
@@ -18307,6 +19010,7 @@ class _PresetRowCtrls {
       endMin: ln.endMin.clamp(0, 1440),
       colorLabel: cat,
       allowedCategories: allowed,
+      orig: ln,
     );
   }
 
@@ -18328,12 +19032,22 @@ class _PresetRowCtrls {
         ? allowedCategories.first
         : 'Routine';
     final cat = allowedCategories.contains(colorLabel) ? colorLabel : first;
+    final o = orig;
     return PresetTaskLine(
       title: titleCtrl.text,
       startMin: startMin,
       endMin: endMin,
       colorLabel: cat,
       notes: notesCtrl.text,
+      stripeHex: o?.stripeHex,
+      iconCode: o?.iconCode,
+      subtasks: o?.subtasks,
+      must: o?.must ?? false,
+      flex: o?.flex ?? false,
+      spanMin: o?.spanMin,
+      spanMax: o?.spanMax,
+      workKind: o?.workKind,
+      frog: o?.frog ?? false,
     );
   }
 }
