@@ -20,6 +20,7 @@ import 'package:sol/web_safe_area.dart';
 import 'package:sol/calendar_export.dart';
 import 'package:sol/macro_plan.dart';
 import 'package:sol/focus_timer.dart';
+import 'package:sol/onboarding.dart';
 import 'package:sol/reminder_prefs_sheet.dart';
 import 'package:sol/widgets/block_session_live_strip.dart';
 import 'package:sol/widgets/current_task/current_task_package.dart';
@@ -2961,6 +2962,153 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
     );
   }
 
+  static const String _kOnboardingDonePrefKey = 'planner_onboarding_done_v1';
+
+  /// Neue Nutzer (noch keine Daten) bekommen beim ersten Start die Einrichtung.
+  Future<void> _maybeFirstRun() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getBool(_kOnboardingDonePrefKey) == true) return;
+      bool has(String k) => (prefs.getString(k) ?? '').trim().length > 2;
+      final existing = has('planner_cached_days_v1') ||
+          has('planner_user_preset_days_v1') ||
+          has('planner_preset_task_templates_v1');
+      if (existing) {
+        await prefs.setBool(_kOnboardingDonePrefKey, true);
+        return;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 1200));
+      if (!mounted) return;
+      await _runOnboarding();
+    } catch (_) {}
+  }
+
+  Future<void> _runOnboarding() async {
+    final res = await Navigator.of(context).push<OnboardingResult>(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => const OnboardingScreen(),
+      ),
+    );
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_kOnboardingDonePrefKey, true);
+    } catch (_) {}
+    if (res == null || !mounted) return;
+    final lines = _onboardingLines(res);
+    final id = _newUserPresetDayIdStatic();
+    final key = 'u:$id';
+    setState(() {
+      _userPresetDays.add(UserPresetDay(id: id, name: 'Mein Tag', lines: lines));
+      _selectedDate = _onlyDay(DateTime.now());
+    });
+    await _saveUserPresetDays();
+    if (!mounted) return;
+    _recordUndoSnapshot();
+    setState(() => _applyConfirmedPresetLines(key, lines, asHauptplan: true));
+    _flushPersistDayPlans();
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+      const SnackBar(
+        content: Text('Dein Tag „Mein Tag“ ist angelegt – ändern unter Modus › Preset-Raster.'),
+      ),
+    );
+  }
+
+  List<PresetTaskLine> _onboardingLines(OnboardingResult r) {
+    final wake = r.wake;
+    var sleep = r.sleep;
+    if (sleep <= wake) sleep = 1435; // nach Mitternacht: bis Tagesende
+    final mEnd = min(sleep, wake + r.morningMin);
+    final eStart = max(mEnd, sleep - r.eveningMin);
+    final out = <PresetTaskLine>[
+      PresetTaskLine(
+        title: 'Morgenroutine',
+        startMin: wake,
+        endMin: mEnd,
+        colorLabel: 'Routine',
+        subtasks: r.morningItems,
+        must: true,
+        flex: true,
+        spanMin: max(15, r.morningMin - 15),
+        spanMax: r.morningMin + 15,
+        workKind: 'routine',
+      ),
+    ];
+    final fixed = [
+      for (final f in r.fixed)
+        if (f.end > f.start) f,
+    ]..sort((a, b) => a.start.compareTo(b.start));
+    for (final f in fixed) {
+      final lower = f.title.toLowerCase();
+      out.add(
+        PresetTaskLine(
+          title: f.title,
+          startMin: f.start,
+          endMin: f.end,
+          colorLabel: lower.contains('training') || lower.contains('gym')
+              ? 'Routine'
+              : 'Wichtig',
+          must: f.must,
+        ),
+      );
+    }
+    // Fokus-Blöcke in freie Lücken zwischen Morgen- und Abendroutine legen.
+    var placed = 0;
+    var cursor = mEnd + 15;
+    final busy = [for (final f in fixed) (f.start, f.end)];
+    while (placed < r.focusBlocks && cursor + 60 <= eStart) {
+      final hit = busy.where((b) => cursor < b.$2 && cursor + 60 > b.$1).toList();
+      if (hit.isNotEmpty) {
+        cursor = hit.map((b) => b.$2).reduce(max) + 15;
+        continue;
+      }
+      var end = min(cursor + 90, eStart);
+      for (final b in busy) {
+        if (b.$1 > cursor && b.$1 < end) end = b.$1;
+      }
+      if (end - cursor < 60) {
+        cursor = end + 15;
+        continue;
+      }
+      placed++;
+      out.add(
+        PresetTaskLine(
+          title: r.focusBlocks > 1 ? 'Fokus-Block $placed' : 'Fokus-Block',
+          startMin: cursor,
+          endMin: end,
+          colorLabel: 'Fokus',
+          flex: true,
+          spanMin: 60,
+          spanMax: 120,
+          workKind: 'fokus',
+        ),
+      );
+      cursor = end + 30;
+    }
+    out.add(
+      PresetTaskLine(
+        title: 'Abendroutine',
+        startMin: eStart,
+        endMin: sleep,
+        colorLabel: 'Routine',
+        subtasks: r.eveningItems,
+        must: true,
+        workKind: 'routine',
+      ),
+    );
+    out.add(
+      PresetTaskLine(
+        title: 'Schlafen',
+        startMin: sleep,
+        endMin: wake,
+        colorLabel: 'Routine',
+        must: true,
+      ),
+    );
+    out.sort((a, b) => a.startMin.compareTo(b.startMin));
+    return out;
+  }
+
   /// Timer für einen Block starten (Ziel = Restzeit, wenn er gerade läuft, sonst Blocklänge).
   void _startTimerForBlock(TimeBlock b) {
     int? target;
@@ -4446,6 +4594,12 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
       (
         title: 'Einstellungen',
         items: [
+          (
+            icon: Icons.auto_awesome_outlined,
+            label: 'Einrichtung',
+            sub: 'Tag neu aufbauen (erstellt Preset „Mein Tag“)',
+            onTap: () => unawaited(_runOnboarding()),
+          ),
           (
             icon: Icons.dashboard_customize_outlined,
             label: 'Presets',
@@ -7124,6 +7278,7 @@ class _PlannerHomeState extends State<PlannerHome> with WidgetsBindingObserver {
     });
     unawaited(plannerNotificationsInit());
     unawaited(_timerStore.load());
+    unawaited(_maybeFirstRun());
     _reminderTicker = Timer.periodic(const Duration(seconds: 35), (_) {
       if (!mounted) return;
       unawaited(_syncReminders());
