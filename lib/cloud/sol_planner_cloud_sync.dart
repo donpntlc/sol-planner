@@ -169,6 +169,25 @@ class SolPlannerCloudCoordinator {
     await Supabase.instance.client.auth.signOut();
   }
 
+  static const appUrl = 'https://donpntlc.github.io/sol-planner/';
+
+  Future<void> signInPassword(String email, String password) async {
+    await Supabase.instance.client.auth.signInWithPassword(
+      email: email.trim(),
+      password: password,
+    );
+  }
+
+  /// true = sofort angemeldet, false = Bestätigungs-Mail wurde geschickt.
+  Future<bool> signUpPassword(String email, String password) async {
+    final r = await Supabase.instance.client.auth.signUp(
+      email: email.trim(),
+      password: password,
+      emailRedirectTo: appUrl,
+    );
+    return r.session != null;
+  }
+
   Future<void> requestEmailOtp(String email) async {
     if (!SolCloudConfig.isConfigured) return;
     await Supabase.instance.client.auth.signInWithOtp(email: email.trim());

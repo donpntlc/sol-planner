@@ -90,70 +90,66 @@ class _SolCloudSyncBodyState extends State<_SolCloudSyncBody> {
     if (mounted) setState(() => _busy = v);
   }
 
-  Future<void> _sendOtp() async {
+  Future<void> _afterLogin() async {
+    await SolPlannerCloudCoordinator.instance.setSyncEnabled(true);
+    // Gibt es schon einen Cloud-Stand (anderes Gerät)? Dann holen, sonst hochladen.
+    final applied = await SolPlannerCloudCoordinator.instance
+        .pullAndApplyIfNewer(forceIgnoreMarker: true);
+    if (applied) {
+      await widget.onAppliedRemotePayload();
+    } else {
+      await SolPlannerCloudCoordinator.instance.pushNow();
+    }
+    if (mounted) {
+      setState(() {
+        _syncOn = true;
+        _info = applied
+            ? 'Angemeldet – Stand aus der Cloud geladen.'
+            : 'Angemeldet – dein Stand ist jetzt in der Cloud.';
+        _otpCtrl.clear();
+      });
+    }
+  }
+
+  Future<void> _login({required bool create}) async {
+    final mail = _emailCtrl.text.trim();
+    final pw = _otpCtrl.text;
     setState(() {
       _error = null;
       _info = null;
       _otpHint = null;
     });
-    final mail = _emailCtrl.text.trim();
-    if (!SolCloudConfig.isConfigured) return;
-    if (mail.isEmpty) {
+    if (mail.isEmpty || !mail.contains('@')) {
       setState(() => _error = 'Bitte gib deine E-Mail ein.');
       return;
     }
-
-    await _setBusy(true);
-    try {
-      await SolPlannerCloudCoordinator.instance.requestEmailOtp(mail);
-      setState(() {
-        _otpHint =
-            'Wenn das Projekt OTP nutzt: Code aus der E-Mail hier einfügen.';
-        _info = 'E-Mail wurde geschickt (Supabase SMTP).';
-      });
-    } on AuthException catch (e) {
-      setState(() => _error = e.message);
-    } catch (e) {
-      setState(() => _error = '$e');
-    } finally {
-      await _setBusy(false);
-    }
-  }
-
-  Future<void> _verifyOtp() async {
-    final mail = _emailCtrl.text.trim();
-    final code = _otpCtrl.text.trim();
-    setState(() {
-      _error = null;
-      _info = null;
-    });
-
-    if (mail.isEmpty) {
-      setState(() => _error = 'Bitte erst E-Mail angeben.');
+    if (pw.length < 6) {
+      setState(() => _error = 'Passwort: mindestens 6 Zeichen.');
       return;
     }
-    if (code.isEmpty || code.length < 4) {
-      setState(() => _error = 'Bitte den Code aus der E-Mail eintragen.');
-      return;
-    }
-
     await _setBusy(true);
     try {
-      await SolPlannerCloudCoordinator.instance.verifyEmailOtp(
-        email: mail,
-        token: code,
-      );
-      await SolPlannerCloudCoordinator.instance.setSyncEnabled(true);
-      if (mounted) {
-        setState(() {
-          _syncOn = true;
-          _info = 'Angemeldet. Nutze dieselbe E-Mail auf jedem Gerät.';
-          _otpCtrl.clear();
-        });
+      if (create) {
+        final direct =
+            await SolPlannerCloudCoordinator.instance.signUpPassword(mail, pw);
+        if (!direct) {
+          setState(() => _otpHint =
+              'Bestätigungs-Mail ist unterwegs. Link in der Mail antippen, danach hier mit E-Mail + Passwort anmelden.');
+          return;
+        }
+      } else {
+        await SolPlannerCloudCoordinator.instance.signInPassword(mail, pw);
       }
-      SolPlannerCloudCoordinator.instance.schedulePushDebounced();
+      await _afterLogin();
     } on AuthException catch (e) {
-      setState(() => _error = e.message);
+      final m = e.message.toLowerCase();
+      setState(() => _error = m.contains('invalid login')
+          ? 'E-Mail oder Passwort stimmt nicht (oder Konto noch nicht bestätigt).'
+          : m.contains('not confirmed')
+              ? 'Bitte erst den Link in der Bestätigungs-Mail antippen.'
+              : m.contains('already registered')
+                  ? 'Konto gibt es schon – einfach anmelden.'
+                  : e.message);
     } catch (e) {
       setState(() => _error = '$e');
     } finally {
@@ -167,7 +163,7 @@ class _SolCloudSyncBodyState extends State<_SolCloudSyncBody> {
       _info = null;
     });
     if (!_hasSession) {
-      setState(() => _error = 'Erst mit E-Mail anmelden.');
+      setState(() => _error = 'Erst anmelden.');
       return;
     }
     await SolPlannerCloudCoordinator.instance.setSyncEnabled(true);
@@ -188,7 +184,7 @@ class _SolCloudSyncBodyState extends State<_SolCloudSyncBody> {
       _info = null;
     });
     if (!_hasSession) {
-      setState(() => _error = 'Erst mit E-Mail anmelden.');
+      setState(() => _error = 'Erst anmelden.');
       return;
     }
     await SolPlannerCloudCoordinator.instance.setSyncEnabled(true);
@@ -320,47 +316,58 @@ class _SolCloudSyncBodyState extends State<_SolCloudSyncBody> {
                     await SolPlannerCloudCoordinator.instance.setSyncEnabled(v);
                   },
           ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _emailCtrl,
-            autocorrect: false,
-            keyboardType: TextInputType.emailAddress,
-            decoration: InputDecoration(
-              labelText: 'E-Mail',
-              hintText: 'dieselbe Adresse auf jedem Gerät',
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
+          if (!_hasSession) ...[
+            const SizedBox(height: 12),
+            Text(
+              'Mit demselben Konto auf jedem Gerät anmelden – dann sind Plan, Presets und Zeiten überall gleich.',
+              style: textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _emailCtrl,
+              autocorrect: false,
+              keyboardType: TextInputType.emailAddress,
+              autofillHints: const [AutofillHints.email],
+              decoration: InputDecoration(
+                labelText: 'E-Mail',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 8),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton(
-              onPressed: _busy ? null : _sendOtp,
-              child: const Text('Code anfordern'),
-            ),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _otpCtrl,
-            autocorrect: false,
-            keyboardType: TextInputType.visiblePassword,
-            decoration: InputDecoration(
-              labelText: 'Einmalcode (OTP)',
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _otpCtrl,
+              autocorrect: false,
+              obscureText: true,
+              autofillHints: const [AutofillHints.password],
+              decoration: InputDecoration(
+                labelText: 'Passwort',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
               ),
+              onSubmitted: (_) => _login(create: false),
             ),
-          ),
-          const SizedBox(height: 8),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.tonal(
-              onPressed: _busy ? null : _verifyOtp,
-              child: const Text('Anmelden'),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: FilledButton(
+                    onPressed: _busy ? null : () => _login(create: false),
+                    child: const Text('Anmelden'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: FilledButton.tonal(
+                    onPressed: _busy ? null : () => _login(create: true),
+                    child: const Text('Konto erstellen'),
+                  ),
+                ),
+              ],
             ),
-          ),
+          ],
           const Divider(height: 32),
           Row(
             children: [
